@@ -1,0 +1,818 @@
+{% extends "base.html" %}
+{% block title %}规划详情 - {{ plan.plan_id }} - VisionFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- 头部 -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold">{{ plan.persona.occupation }}</h1>
+        <span class="text-xs text-gray-600 font-mono">{{ plan.plan_id }}</span>
+      </div>
+      <p class="text-sm text-gray-500 mt-1">
+        {{ plan.persona.age }}y {{ plan.persona.gender }} · {{ plan.persona.ethnicity }} · {{ plan.persona.location }}
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="exportPlan()"
+        class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs font-medium transition-colors">
+        导出 JSON
+      </button>
+      <button onclick="deletePlan()"
+        class="px-3 py-1.5 bg-red-900/40 hover:bg-red-900/60 text-red-400 rounded-lg text-xs font-medium transition-colors">
+        删除
+      </button>
+    </div>
+  </div>
+
+  <!-- 人设卡片 -->
+  <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-4">
+    <h3 class="text-sm font-semibold text-brand-300 mb-3">人设详情</h3>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+      <div><span class="text-gray-500">平台:</span> {{ plan.persona.platform or 'TK' }}</div>
+      <div><span class="text-gray-500">职业:</span> {{ plan.persona.occupation }} ({{ plan.persona.experience_years }}y)
+      </div>
+      <div><span class="text-gray-500">语言:</span> {{ plan.persona.language }} ({{ plan.persona.accent }})</div>
+      <div><span class="text-gray-500">受众:</span> {{ plan.persona.target_audience or '—' }}</div>
+      {% if plan.persona.personal_tags %}
+      <div class="col-span-full"><span class="text-gray-500">标签:</span> {{ plan.persona.personal_tags }}</div>
+      {% endif %}
+      {% if plan.persona.personality %}
+      <div class="col-span-full"><span class="text-gray-500">性格:</span> {{ plan.persona.personality }}</div>
+      {% endif %}
+      {% if plan.persona.content_style %}
+      <div class="col-span-full"><span class="text-gray-500">风格:</span> {{ plan.persona.content_style }}</div>
+      {% endif %}
+      {% if plan.persona.portrait_description %}
+      <div class="col-span-full"><span class="text-gray-500">肖像:</span> {{ plan.persona.portrait_description }}</div>
+      {% endif %}
+    </div>
+    {% if plan.portrait_image_file %}
+    <div class="mt-4">
+      <span class="text-gray-500 text-sm mb-2 block">生成的专属肖像:</span>
+      <img src="/api/media?path={{ plan.portrait_image_file | urlencode }}" alt="Persona Portrait"
+        class="w-32 h-auto rounded-lg border border-gray-700 shadow-sm">
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 摘要 -->
+  {% if plan.summary %}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 text-center">
+      <div class="text-2xl font-bold text-brand-400">{{ plan.calendar | length }}</div>
+      <div class="text-xs text-gray-500">总内容数</div>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 text-center">
+      <div class="text-2xl font-bold text-brand-400">{{ plan.scripts | length }}</div>
+      <div class="text-xs text-gray-500">已完成脚本</div>
+    </div>
+    {% set s = plan.summary.calendar_summary or {} %}
+    {% if s.track_a %}
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 text-center">
+      <div class="text-2xl font-bold text-blue-400">{{ s.track_a }}</div>
+      <div class="text-xs text-gray-500">核心专业 (A)</div>
+    </div>
+    {% endif %}
+    {% if s.viral_videos %}
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 text-center">
+      <div class="text-2xl font-bold text-green-400">{{ s.viral_videos }}</div>
+      <div class="text-xs text-gray-500">爆款内容</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- 脚本列表 -->
+  {% if plan.scripts %}
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-semibold">详细脚本</h3>
+      <button onclick="regenerateAllScripts('{{ plan.plan_id }}', this)"
+        class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-medium transition-colors">
+        重新生成全部脚本
+      </button>
+    </div>
+    <div class="space-y-3">
+      {% for script in plan.scripts | sort(attribute='day') %}
+      <details class="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">
+        <summary class="px-4 py-3 cursor-pointer hover:bg-gray-800/50 transition-colors flex items-center gap-3">
+          <span class="text-xs font-bold text-brand-400 w-12">Day {{ script.day }}</span>
+          <span class="text-sm font-medium flex-1">{{ script.title_en }}</span>
+          {% if script.content_type == 'image_text' %}
+          {% set frames_list = script.frames or [] %}
+          {% set img_done_cnt = frames_list | selectattr('image_status', 'equalto', 'done') | list | length %}
+          {% if frames_list and img_done_cnt == (frames_list | length) %}
+          <span class="text-[10px] px-2 py-0.5 rounded bg-green-900/40 text-green-400">images done</span>
+          {% elif img_done_cnt > 0 %}
+          <span class="text-[10px] px-2 py-0.5 rounded bg-yellow-900/40 text-yellow-400">images {{ img_done_cnt }}/{{ frames_list | length }}</span>
+          {% else %}
+          <span class="text-[10px] px-2 py-0.5 rounded bg-gray-700 text-gray-400">no images</span>
+          {% endif %}
+          {% elif script.video_status == 'done' %}
+          <span class="text-[10px] px-2 py-0.5 rounded bg-green-900/40 text-green-400">video done</span>
+          {% elif script.video_status == 'failed' %}
+          <span class="text-[10px] px-2 py-0.5 rounded bg-red-900/40 text-red-400">video failed</span>
+          {% endif %}
+        </summary>
+        <div class="px-4 pb-4 space-y-3 text-sm border-t border-gray-800/50">
+
+          {% if script.cover %}
+          <div class="pt-3">
+            <div class="text-xs text-gray-500 mb-1">封面文案</div>
+            <div class="font-bold text-base">{{ script.cover.main_text }}</div>
+            <div class="text-xs text-gray-400">{{ script.cover.sub_text or '' }}</div>
+          </div>
+          {% endif %}
+
+          {% if script.core_topic %}
+          <div>
+            <span class="text-xs text-gray-500">核心主题:</span> {{ script.core_topic }}
+          </div>
+          {% endif %}
+
+          {% if script.frames %}
+          <div>
+            <div class="text-xs text-gray-500 mb-2">图文帧 ({{ script.frames | length }})</div>
+            <div class="space-y-2">
+              {% for frame in script.frames %}
+              <div class="bg-gray-800/40 rounded-lg p-2.5 border-l-2 border-brand-700">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-mono text-brand-400">Frame {{ frame.frame_id }}</span>
+                  {% if frame.image_status == 'done' %}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-green-900/40 text-green-400">done</span>
+                  {% elif frame.image_status == 'failed' %}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-900/40 text-red-400">failed</span>
+                  {% elif frame.image_status == 'pending' %}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">pending</span>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-gray-300 mb-1">{{ frame.caption }}</div>
+                {% if frame.image_description %}
+                <div class="text-xs text-gray-500">配图描述: {{ frame.image_description }}</div>
+                {% endif %}
+                {% if frame.image_prompt %}
+                <details class="mt-1">
+                  <summary class="text-[10px] text-gray-600 cursor-pointer hover:text-gray-400">image prompt</summary>
+                  <div class="text-xs text-gray-600 italic mt-1 break-all">{{ frame.image_prompt }}</div>
+                </details>
+                {% endif %}
+                {% if frame.image_file %}
+                <img src="/api/media?path={{ frame.image_file | urlencode }}" alt="Frame {{ frame.frame_id }}"
+                  class="mt-2 w-full max-w-xs rounded-lg border border-gray-700" loading="lazy">
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% elif script.shots %}
+          <div>
+            <div class="text-xs text-gray-500 mb-2">镜头拆分</div>
+            <div class="space-y-2">
+              {% for shot in script.shots %}
+              <div class="bg-gray-800/40 rounded-lg p-2.5 border-l-2 border-brand-700">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-mono text-brand-400">Shot {{ shot.shot_id }}</span>
+                  <span class="text-xs text-gray-600">{{ shot.duration }}</span>
+                  <span class="text-xs text-gray-600">{{ shot.location }}</span>
+                </div>
+                <div class="text-xs text-gray-300 mb-1">{{ shot.visual }}</div>
+                {% if shot.dialogue %}
+                <div class="text-xs text-gray-400 italic">"{{ shot.dialogue }}"</div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if script.recommendations %}
+          <div>
+            <div class="text-xs text-gray-500 mb-1">品牌推荐</div>
+            <div class="flex flex-wrap gap-1.5">
+              {% for rec in script.recommendations %}
+              <span class="text-xs px-2 py-1 bg-gray-800 rounded">{{ rec }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if script.hashtags %}
+          <div>
+            <div class="text-xs text-gray-500 mb-1">标签</div>
+            <div class="flex flex-wrap gap-1">
+              {% for tag in script.hashtags %}
+              <span class="text-xs text-blue-400">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if script.video_prompt %}
+          <div>
+            <div class="text-xs text-gray-500 mb-1">视频 Prompt (seedance-2.0-fast)</div>
+            <div class="text-xs text-gray-400 bg-gray-800/40 rounded p-2">{{ script.video_prompt }}</div>
+          </div>
+          {% endif %}
+
+          {% if script.notes %}
+          <div>
+            <span class="text-xs text-gray-500">备注:</span> {{ script.notes }}
+          </div>
+          {% endif %}
+
+          <div class="pt-3 flex justify-end items-center gap-2 border-t border-gray-800/50 mt-3">
+            <button onclick="regenerateAll('{{ plan.plan_id }}', {{ script.day }}, this)"
+              class="px-4 py-1.5 bg-red-900/50 hover:bg-red-800/60 text-red-200 rounded-lg text-xs font-medium transition-colors border border-red-800">
+              完全重新生成(日历+脚本)
+            </button>
+            <button onclick="regenerateScript('{{ plan.plan_id }}', {{ script.day }}, this)"
+              class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-medium transition-colors border border-gray-700">
+              重新生成脚本
+            </button>
+            {% if script.content_type == 'image_text' %}
+            <button onclick="generateImages('{{ plan.plan_id }}', {{ script.day }}, this)"
+              class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-medium transition-colors">
+              生成配图
+            </button>
+            {% else %}
+            <button onclick="generateVideo('{{ plan.plan_id }}', {{ script.day }}, this)"
+              class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-medium transition-colors">
+              确认脚本并生成视频
+            </button>
+            {% endif %}
+            {% if script.content_type == 'image_text' and (script.frames | selectattr('image_status', 'equalto', 'done') | list | length) > 0 %}
+            <button
+              onclick="openScheduleModal('{{ plan.plan_id }}', {{ script.day }}, '{{ script.hashtags[:3]|join(', ') }}', this, true)"
+              data-title="{{ script.title_en | e }}"
+              data-topic="{{ script.core_topic | e }}"
+              data-images='{{ script.frames | selectattr("image_file") | map(attribute="image_file") | list | tojson }}'
+              class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+              设为定时任务
+            </button>
+            {% elif script.video_file %}
+            <a href="/api/media?path={{ script.video_file | urlencode }}" target="_blank"
+              class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                </path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              查看视频
+            </a>
+            <button
+              onclick="openScheduleModal('{{ plan.plan_id }}', {{ script.day }}, '{{ script.hashtags[:3]|join(', ') }}', this, false)"
+              class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+              设为定时任务
+            </button>
+            {% endif %}
+          </div>
+
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 30天日历 -->
+  <div>
+    <h3 class="text-lg font-semibold mb-3">30天日历</h3>
+
+    {% if not plan.calendar %}
+    <div class="text-center py-8 text-gray-600 text-sm">
+      {% if plan.status in ['generating_calendar', 'generating_scripts', 'generating_videos'] %}
+      <span class="pulse-dot">正在生成中...</span>
+      {% else %}
+      日历为空
+      {% endif %}
+    </div>
+    {% else %}
+
+    <!-- 按周分组 -->
+    {% set ns = namespace(week=1, current_day=0) %}
+    {% for entry in plan.calendar %}
+    {% set entry_week = ((entry.day - 1) // 7) + 1 %}
+    {% if entry_week != ns.week %}
+    {% set ns.week = entry_week %}
+  </div><!-- end week grid -->
+  <h4 class="text-sm font-semibold text-gray-400 mt-6 mb-3">Week {{ entry_week }}</h4>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+    {% elif loop.first %}
+    <h4 class="text-sm font-semibold text-gray-400 mb-3">Week 1</h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {% endif %}
+
+      <!-- 日历条目卡片 -->
+      <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 hover:border-gray-700 transition-colors">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-brand-400">Day {{ entry.day }}</span>
+          <div class="flex gap-1">
+            <span class="text-[10px] px-1.5 py-0.5 rounded
+              {% if entry.track == 'A' %}bg-blue-900/40 text-blue-400
+              {% elif entry.track == 'B' %}bg-purple-900/40 text-purple-400
+              {% elif entry.track == 'C' %}bg-orange-900/40 text-orange-400
+              {% elif entry.track == 'D' %}bg-green-900/40 text-green-400
+              {% endif %}">{{ entry.track }}</span>
+            {% if entry.role == 'viral' %}
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-pink-900/40 text-pink-400">viral</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="text-sm font-medium text-gray-200 mb-1">{{ entry.title_en }}</div>
+        <div class="text-xs text-gray-500">{{ entry.title_cn or '' }}</div>
+        {% if entry.topic_summary %}
+        <div class="text-xs text-gray-600 mt-2 line-clamp-2">{{ entry.topic_summary }}</div>
+        {% endif %}
+      </div>
+
+      {% if loop.last %}
+    </div><!-- end last week grid -->
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- 高频品牌 -->
+  {% if plan.summary and plan.summary.frequent_brands %}
+  <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-4">
+    <h3 class="text-sm font-semibold text-brand-300 mb-3">高频品牌清单</h3>
+    <div class="flex flex-wrap gap-2">
+      {% for b in plan.summary.frequent_brands %}
+      <span class="text-xs px-2.5 py-1 bg-gray-800 rounded-lg">
+        {{ b.brand }} <span class="text-gray-600">×{{ b.count }}</span>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- 定时任务弹窗 -->
+<dialog id="scheduleModal"
+  class="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-md text-gray-200 backdrop:bg-black/60">
+  <h3 class="text-lg font-bold mb-4 text-white">设置定时任务</h3>
+
+  <form id="scheduleForm" class="space-y-4">
+    <input type="hidden" id="sch_planId">
+    <input type="hidden" id="sch_day">
+
+    <div id="sch_images_wrap" style="display:none">
+      <label class="block text-sm text-gray-400 mb-1">配图 (点击图片可删除,删除的不发布)</label>
+      <div id="sch_images_preview" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1">目标设备ID</label>
+      <select id="sch_deviceId"
+        class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+        required>
+        <option value="">加载中...</option>
+      </select>
+    </div>
+
+    <div id="sch_platform_section">
+      <label class="block text-sm text-gray-400 mb-1">发布平台 (可多选)</label>
+      <div class="flex gap-4">
+        <label class="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" id="sch_platform_tk" value="tiktok_post"
+            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-brand-500 focus:ring-brand-500 focus:ring-offset-gray-900"
+            checked>
+          TikTok
+        </label>
+        <label class="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" id="sch_platform_yt" value="youtube_post"
+            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-brand-500 focus:ring-brand-500 focus:ring-offset-gray-900"
+            checked>
+          YouTube Shorts
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1">发布时间 (本地时间)</label>
+      <input type="datetime-local" id="sch_time"
+        class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+        required>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1">描述 (留空则不填)</label>
+      <textarea id="sch_desc" rows="3"
+        class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 focus:outline-none"></textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1">标签</label>
+      <input type="text" id="sch_tags"
+        class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-brand-500 focus:outline-none">
+    </div>
+
+    <div class="pt-4 flex justify-end gap-2">
+      <button type="button" onclick="document.getElementById('scheduleModal').close()"
+        class="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors">取消</button>
+      <button type="submit"
+        class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-sm text-white font-medium transition-colors">确认提交</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  function exportPlan() {
+    window.open('/api/plans/' + '{{ plan.plan_id }}' + '/export', '_blank');
+  }
+  function deletePlan() {
+    if (!confirm('确认删除此规划？')) return;
+    fetch('/api/plans/' + '{{ plan.plan_id }}', { method: 'DELETE' })
+      .then(r => r.json())
+      .then(() => window.location.href = '/planner');
+  }
+  function regenerateScript(planId, day, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">重新生成中...</span>';
+
+    fetch(`/api/plans/${planId}/day/${day}/regenerate_script`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.job_id) {
+          const pollJob = () => {
+            fetch('/api/jobs/' + data.job_id)
+              .then(r => r.json())
+              .then(job => {
+                if (job.status === 'running') {
+                  setTimeout(pollJob, 3000);
+                } else if (job.status === 'done') {
+                  window.location.reload();
+                } else {
+                  alert('生成失败: ' + (job.error || '未知错误'));
+                  btn.disabled = false;
+                  btn.innerHTML = originalText;
+                }
+              });
+          };
+          pollJob();
+        } else {
+          alert('启动失败');
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }).catch(e => {
+        alert('请求错误: ' + e);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      });
+  }
+  function generateVideo(planId, day, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">正在生成中...</span>';
+
+    fetch(`/api/plans/${planId}/day/${day}/generate_video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.job_id) {
+          const pollJob = () => {
+            fetch('/api/jobs/' + data.job_id)
+              .then(r => r.json())
+              .then(job => {
+                if (job.status === 'running') {
+                  setTimeout(pollJob, 3000);
+                } else if (job.status === 'done') {
+                  alert('视频生成成功！');
+                  window.location.reload();
+                } else {
+                  alert('生成失败: ' + (job.error || '未知错误'));
+                  btn.disabled = false;
+                  btn.innerHTML = originalText;
+                }
+              });
+          };
+          pollJob();
+        } else {
+          alert('启动失败');
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }).catch(e => {
+        alert('请求错误: ' + e);
+        btn.disabled = false;
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      });
+  }
+  function generateImages(planId, day, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">正在生成配图...</span>';
+
+    fetch(`/api/plans/${planId}/day/${day}/generate_images`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.job_id) {
+          const pollJob = () => {
+            fetch('/api/jobs/' + data.job_id)
+              .then(r => r.json())
+              .then(job => {
+                if (job.status === 'running') {
+                  setTimeout(pollJob, 3000);
+                } else if (job.status === 'done' || job.status === 'partial') {
+                  let msg = '配图生成完成！';
+                  if (job.images_done != null && job.images_total != null) {
+                    msg = `配图生成完成: ${job.images_done}/${job.images_total} 张`;
+                  }
+                  alert(msg);
+                  window.location.reload();
+                } else {
+                  alert('生成失败: ' + (job.error || '未知错误'));
+                  btn.disabled = false;
+                  btn.innerHTML = originalText;
+                }
+              });
+          };
+          pollJob();
+        } else {
+          alert('启动失败');
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }).catch(e => {
+        alert('请求错误: ' + e);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      });
+  }
+  let currentScheduleBtn = null;
+  let devicesLoaded = false;
+
+  function loadDevices(defaultDeviceId) {
+    if (devicesLoaded) return;
+    fetch('/api/devices')
+      .then(r => r.json())
+      .then(data => {
+        const select = document.getElementById('sch_deviceId');
+        select.innerHTML = '';
+        if (data.devices && data.devices.length > 0) {
+          data.devices.forEach(d => {
+            let opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            select.appendChild(opt);
+          });
+          if (data.devices.includes(defaultDeviceId)) {
+            select.value = defaultDeviceId;
+          } else {
+            select.value = data.devices[0];
+          }
+        } else {
+          let opt = document.createElement('option');
+          opt.value = defaultDeviceId;
+          opt.textContent = defaultDeviceId;
+          select.appendChild(opt);
+        }
+        devicesLoaded = true;
+      }).catch(e => {
+        console.error('Failed to load devices', e);
+        const select = document.getElementById('sch_deviceId');
+        select.innerHTML = `<option value="${defaultDeviceId}">${defaultDeviceId}</option>`;
+      });
+  }
+
+  function openScheduleModal(planId, day, tags, btn, isImageText) {
+    document.getElementById('sch_planId').value = planId;
+    document.getElementById('sch_day').value = day;
+
+    // 图文(reddit/Twitter/FB): 平台由后端按 persona.platform 自动决定,隐藏平台选择
+    // 视频(TK/YT): 用户手动选发布平台
+    const platformSection = document.getElementById('sch_platform_section');
+    if (platformSection) platformSection.style.display = isImageText ? 'none' : '';
+    document.getElementById('sch_planId').dataset.isImageText = isImageText ? '1' : '';
+
+    let deviceId = localStorage.getItem('last_device_id') || 'exgk-iphone-63';
+    loadDevices(deviceId);
+
+    // Try setting value immediately if options exist
+    const select = document.getElementById('sch_deviceId');
+    if (devicesLoaded) {
+      let exists = Array.from(select.options).some(o => o.value === deviceId);
+      if (exists) select.value = deviceId;
+    }
+
+    // 描述框: 图文时只填"标题+核心主题"(几句话说清楚, 可编辑), 视频时留空
+    const descEl = document.getElementById('sch_desc');
+    if (isImageText && btn) {
+      // title 已单独存入 title 字段, 描述框只放正文(核心主题)
+      descEl.value = (btn.dataset.topic || '').trim();
+    } else {
+      descEl.value = '';
+    }
+    document.getElementById('sch_tags').value = tags;
+
+    // 配图预览: 图文时显示该天所有配图缩略图,点击可删除(删除的不发布)
+    const imgWrap = document.getElementById('sch_images_wrap');
+    const imgPreview = document.getElementById('sch_images_preview');
+    imgPreview.innerHTML = '';
+    window._sch_keptImages = [];
+    if (isImageText && btn && btn.dataset.images) {
+      try {
+        const imgs = JSON.parse(btn.dataset.images);
+        window._sch_keptImages = imgs.slice();
+        imgs.forEach((p) => {
+          const cell = document.createElement('div');
+          cell.className = 'relative cursor-pointer group';
+          cell.title = '点击删除此图';
+          cell.innerHTML = '<img src="/api/media?path=' + encodeURIComponent(p) + '" class="w-16 h-16 object-cover rounded border border-gray-700 group-hover:border-red-500" loading="lazy">' +
+            '<span class="absolute -top-1 -right-1 w-4 h-4 bg-red-600 text-white text-[10px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100">×</span>';
+          cell.onclick = () => {
+            cell.remove();
+            window._sch_keptImages = window._sch_keptImages.filter(x => x !== p);
+          };
+          imgPreview.appendChild(cell);
+        });
+        imgWrap.style.display = imgs.length ? '' : 'none';
+      } catch (e) { imgWrap.style.display = 'none'; }
+    } else {
+      imgWrap.style.display = 'none';
+    }
+
+    let d = new Date();
+    d.setDate(d.getDate() + day - 1);
+    d.setHours(11, 0, 0, 0);
+
+    let year = d.getFullYear();
+    let month = (d.getMonth() + 1).toString().padStart(2, '0');
+    let date = d.getDate().toString().padStart(2, '0');
+    let hours = d.getHours().toString().padStart(2, '0');
+    let mins = d.getMinutes().toString().padStart(2, '0');
+    document.getElementById('sch_time').value = `${year}-${month}-${date}T${hours}:${mins}`;
+
+    currentScheduleBtn = btn;
+    document.getElementById('scheduleModal').showModal();
+  }
+
+  document.getElementById('scheduleForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const planId = document.getElementById('sch_planId').value;
+    const day = document.getElementById('sch_day').value;
+    const deviceId = document.getElementById('sch_deviceId').value;
+    const scheduledTime = document.getElementById('sch_time').value;
+    const description = document.getElementById('sch_desc').value;
+    const tags = document.getElementById('sch_tags').value;
+
+    const isImageText = document.getElementById('sch_planId').dataset.isImageText === '1';
+
+    const platforms = [];
+    if (!isImageText) {
+      if (document.getElementById('sch_platform_tk').checked) platforms.push('tiktok_post');
+      if (document.getElementById('sch_platform_yt').checked) platforms.push('youtube_post');
+      if (platforms.length === 0) {
+        alert('请至少选择一个发布平台！');
+        return;
+      }
+    }
+    // 图文: platforms 留空,后端按 persona.platform 自动映射 task_type
+
+    localStorage.setItem('last_device_id', deviceId);
+    document.getElementById('scheduleModal').close();
+
+    const btn = currentScheduleBtn;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">正在提交并上传COS...</span>';
+
+    fetch(`/api/plans/${planId}/day/${day}/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        scheduled_time: scheduledTime,
+        description: description,
+        tags: tags,
+        platforms: platforms,
+        image_files: isImageText ? (window._sch_keptImages || []) : []
+      })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          alert(`已成功设为定时任务！\n设备: ${deviceId}\n发布时间: ${data.scheduled_at}`);
+        } else {
+          alert('设置失败: ' + (data.error || '未知错误'));
+        }
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }).catch(e => {
+        alert('请求错误: ' + e);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      });
+  });
+  function regenerateAll(planId, day, btn) {
+    if (!confirm(`确定要完全重新生成 Day ${day} 的内容吗？\n这将更换当天的日历主题，并基于新主题重新生成脚本，完全覆盖当前内容！`)) return;
+
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">生成中...</span>';
+
+    fetch(`/api/plans/${planId}/day/${day}/regenerate_all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.job_id) {
+          const pollJob = () => {
+            fetch('/api/jobs/' + data.job_id)
+              .then(r => r.json())
+              .then(job => {
+                if (job.status === 'done') {
+                  location.reload();
+                } else if (job.status === 'failed') {
+                  alert('完全重新生成失败: ' + (job.error || '未知错误'));
+                  btn.disabled = false;
+                  btn.innerText = originalText;
+                } else {
+                  setTimeout(pollJob, 2000);
+                }
+              });
+          };
+          setTimeout(pollJob, 2000);
+        } else {
+          alert(data.error || '完全重新生成失败');
+          btn.disabled = false;
+          btn.innerText = originalText;
+        }
+      })
+      .catch(err => {
+        alert('请求失败');
+        btn.disabled = false;
+        btn.innerText = originalText;
+      });
+  }
+  function regenerateAllScripts(planId, btn) {
+    if (!confirm('确定要重新生成全部 30 天的脚本吗？\n日历主题保留不变，只重做所有脚本（含改稿/配图描述）。全部 30 天会比较耗时。')) return;
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pulse-dot">重新生成全部脚本中(30天)...</span>';
+
+    fetch(`/api/plans/${planId}/regenerate_all_scripts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.job_id) {
+          const pollJob = () => {
+            fetch('/api/jobs/' + data.job_id)
+              .then(r => r.json())
+              .then(job => {
+                if (job.status === 'done') {
+                  alert('全部脚本重新生成完成！');
+                  location.reload();
+                } else if (job.status === 'failed') {
+                  alert('重新生成失败: ' + (job.error || '未知错误'));
+                  btn.disabled = false;
+                  btn.innerText = originalText;
+                } else {
+                  setTimeout(pollJob, 5000);
+                }
+              });
+          };
+          pollJob();
+        } else {
+          alert('启动失败');
+          btn.disabled = false;
+          btn.innerText = originalText;
+        }
+      })
+      .catch(e => {
+        alert('请求错误: ' + e);
+        btn.disabled = false;
+        btn.innerText = originalText;
+      });
+  }
+</script>
+{% endblock %}

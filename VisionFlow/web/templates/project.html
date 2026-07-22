@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% set page_id = "project" %}
+{% block title %}项目 {{ project.project_id }} - VisionFlow{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+  <!-- 顶部信息 -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <a href="/" class="text-gray-500 hover:text-gray-300">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <div>
+        <h1 class="text-xl font-bold flex items-center gap-2">
+          项目 {{ project.project_id }}
+          <span class="text-xs px-2 py-0.5 rounded
+            {% if project.status == 'done' %}bg-green-900/50 text-green-400
+            {% elif project.status == 'failed' %}bg-red-900/50 text-red-400
+            {% else %}bg-yellow-900/50 text-yellow-400{% endif %}">
+            {{ project.status }}
+          </span>
+        </h1>
+        <p class="text-xs text-gray-500 mt-0.5">{{ project.source_video }} | 创建: {{ project.created_at[:19] }}</p>
+      </div>
+    </div>
+    <button onclick="deleteProject('{{ project.project_id }}')"
+            class="px-3 py-1.5 text-sm rounded-md border border-red-800 text-red-400 hover:bg-red-900/30 transition-colors">
+      删除项目
+    </button>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="grid grid-cols-4 gap-3 mb-6">
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-3 text-center">
+      <div class="text-lg font-bold text-brand-400">{{ "%.1f"|format(project.video_duration or 0) }}s</div>
+      <div class="text-xs text-gray-500">视频时长</div>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-3 text-center">
+      <div class="text-lg font-bold text-blue-400">{{ project.keyframes|length }}</div>
+      <div class="text-xs text-gray-500">关键帧</div>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-3 text-center">
+      <div class="text-lg font-bold text-purple-400">{{ project.storyboard|length }}</div>
+      <div class="text-xs text-gray-500">分镜数</div>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-3 text-center">
+      {% set done_count = project.storyboard|selectattr('clip_status', 'equalto', 'done')|list|length %}
+      <div class="text-lg font-bold text-green-400">{{ done_count }}/{{ project.storyboard|length }}</div>
+      <div class="text-xs text-gray-500">已完成</div>
+    </div>
+  </div>
+
+  <!-- 错误信息 -->
+  {% if project.error %}
+  <div class="bg-red-900/20 border border-red-800/50 rounded-lg p-4 mb-6">
+    <p class="text-red-400 font-medium">错误信息</p>
+    <p class="text-red-300 text-sm mt-1">{{ project.error }}</p>
+  </div>
+  {% endif %}
+
+  <!-- 分镜详情 -->
+  {% if project.storyboard %}
+  <h2 class="text-lg font-semibold mb-3">分镜详情</h2>
+  <div class="space-y-3">
+    {% for scene in project.storyboard %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+      <div class="flex items-start gap-4">
+        <!-- 序号+时间 -->
+        <div class="text-center min-w-[60px]">
+          <div class="text-2xl font-bold text-brand-400">{{ scene.scene_id }}</div>
+          <div class="text-xs text-gray-500 mt-1">{{ "%.1f"|format(scene.time_start) }}s ~ {{ "%.1f"|format(scene.time_end) }}s</div>
+          <div class="text-xs text-gray-600">{{ "%.1f"|format(scene.duration) }}s</div>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <!-- 描述 -->
+          <p class="text-sm text-gray-300 mb-2">{{ scene.description }}</p>
+
+          <!-- Prompt -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-gray-800/50 rounded p-2">
+              <span class="text-gray-500">Image Prompt:</span>
+              <p class="text-gray-400 mt-0.5 line-clamp-2">{{ scene.image_prompt[:120] }}{% if scene.image_prompt|length > 120 %}...{% endif %}</p>
+            </div>
+            <div class="bg-gray-800/50 rounded p-2">
+              <span class="text-gray-500">Video Prompt:</span>
+              <p class="text-gray-400 mt-0.5 line-clamp-2">{{ scene.video_prompt[:120] }}{% if scene.video_prompt|length > 120 %}...{% endif %}</p>
+            </div>
+          </div>
+
+          <!-- 生成的图片+视频 -->
+          <div class="flex items-center gap-3 mt-3">
+            {% if scene.generated_image %}
+            <div class="flex items-center gap-1 text-xs text-green-400">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+              首帧图
+            </div>
+            {% endif %}
+
+            {% if scene.generated_clip %}
+            <a href="/output/{{ scene.generated_clip.split('output/')[-1] if 'output/' in scene.generated_clip else '#' }}"
+               class="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              视频
+            </a>
+            {% endif %}
+
+            <span class="text-xs
+              {% if scene.clip_status == 'done' %}text-green-500
+              {% elif scene.clip_status == 'failed' %}text-red-500
+              {% elif scene.clip_status == 'generating' %}text-yellow-500
+              {% else %}text-gray-600{% endif %}">
+              {{ scene.clip_status or 'pending' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center text-gray-600 py-12">
+    <p>暂无分镜数据{% if project.status == 'analyzing' or project.status == 'storyboarding' %}，正在处理中...{% endif %}</p>
+  </div>
+  {% endif %}
+
+  <!-- 自动刷新进行中的项目 -->
+  {% if project.status not in ['done', 'failed'] %}
+  <script>setTimeout(() => location.reload(), 5000);</script>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteProject(pid) {
+  if (!confirm('确定删除此项目？')) return;
+  fetch('/api/projects/' + pid, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(() => { window.location.href = '/'; })
+    .catch(err => alert('删除失败: ' + err.message));
+}
+</script>
+{% endblock %}

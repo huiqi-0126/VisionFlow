@@ -1,0 +1,8 @@
+Default title style
+
+- Position: horizontal center, approximately 50% frame height.
+- Primary text: bold white, compact all caps.
+- Accent text: bold italic warm yellow (#F1CF69).
+- Font size: approximately 3.4% of frame width.
+- Shadow: subtle black offset for readability.
+- The renderer may adapt these values to match the supplied reference.

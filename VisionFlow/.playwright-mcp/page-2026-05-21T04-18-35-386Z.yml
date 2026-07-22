@@ -1,0 +1,42 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Vision Flow Web" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Vision
+        - generic [ref=e6]: Flow
+        - generic [ref=e7]: Web
+      - generic [ref=e8]:
+        - link "Dashboard" [ref=e9] [cursor=pointer]:
+          - /url: /
+        - link "Generate" [ref=e10] [cursor=pointer]:
+          - /url: /generate
+        - link "Tasks" [ref=e11] [cursor=pointer]:
+          - /url: /tasks
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - heading "Tasks" [level=1] [ref=e14]
+      - generic [ref=e15]:
+        - combobox [ref=e16]:
+          - option "All Status" [selected]
+          - option "Success"
+          - option "Failed"
+          - option "Processing"
+          - option "Created"
+        - combobox [ref=e17]:
+          - option "All Niches" [selected]
+          - option "fitness (健身/Fitness)"
+          - option "streetwear (街头穿搭/Streetwear)"
+          - option "luxury (奢华生活/Luxury Lifestyle)"
+          - option "aesthetic-cooking (美食/Aesthetic Cooking)"
+          - option "travel (旅行探索/Travel)"
+          - option "motivation (励志/Motivation)"
+          - option "pets (萌宠/Pets)"
+          - option "tech-gadgets (科技/Tech & Gadgets)"
+          - option "nature (自然纪录片/Nature)"
+          - option "street-photography (街拍/Street Photography)"
+          - option "self-care (自我关爱/Self Care)"
+          - option "comedy (搞笑/Comedy Skits)"
+        - button "Refresh" [ref=e18] [cursor=pointer]
+    - paragraph [ref=e21]: No tasks found
+  - contentinfo [ref=e22]: VisionFlow — AI Video Automation for TikTok / Instagram / YouTube

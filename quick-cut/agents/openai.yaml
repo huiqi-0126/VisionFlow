@@ -1,0 +1,4 @@
+interface:
+  display_name: "快剪"
+  short_description: "分析参考视频节奏，并自动完成多素材快切、标题和音效导出"
+  default_prompt: "使用 $quick-cut 参考我提供的视频节奏，把素材自动剪成成片；开始前请确认 Caption Title。"

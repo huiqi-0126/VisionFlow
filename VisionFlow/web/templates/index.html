@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% set page_id = "index" %}
+{% block title %}VisionFlow - 视频复刻{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+
+  <!-- 上传区域 -->
+  <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 mb-6">
+    <h2 class="text-xl font-bold mb-4">上传视频开始复刻</h2>
+    <div id="drop-zone"
+         class="border-2 border-dashed border-gray-700 rounded-lg p-10 text-center cursor-pointer
+                hover:border-brand-500 hover:bg-brand-500/5 transition-colors">
+      <input type="file" id="video-input" accept="video/*" class="hidden">
+      <p class="text-gray-400 text-lg mb-1">点击或拖放视频文件</p>
+      <p class="text-gray-500 text-sm">支持 MP4 / MOV / AVI / MKV / WebM</p>
+    </div>
+    <div id="upload-progress" class="hidden mt-4">
+      <div class="bg-gray-800 rounded-full h-2">
+        <div id="upload-bar" class="bg-brand-500 h-2 rounded-full transition-all" style="width:0%"></div>
+      </div>
+      <p id="upload-status" class="text-sm text-gray-400 mt-2">上传中...</p>
+    </div>
+    <div id="replicate-section" class="hidden mt-4">
+      <!-- 风格选择 -->
+      <div class="mb-4">
+        <p class="text-sm text-gray-400 mb-3">选择创作风格（可选，留空则自动识别）</p>
+        <div class="grid grid-cols-3 gap-2 mb-2" id="style-cats">
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="">
+            <input type="radio" name="style-cat" value="" checked class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🔍 自动</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="drama">
+            <input type="radio" name="style-cat" value="drama" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🎬 剧情叙事</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="visual">
+            <input type="radio" name="style-cat" value="visual" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">✨ 视觉质感</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="education">
+            <input type="radio" name="style-cat" value="education" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">📚 知识教育</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="commerce">
+            <input type="radio" name="style-cat" value="commerce" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🛍️ 带货转化</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="engagement">
+            <input type="radio" name="style-cat" value="engagement" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🙌 互动参与</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="emotional">
+            <input type="radio" name="style-cat" value="emotional" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">💫 情感共鸣</p></div>
+          </label>
+          <label class="style-cat flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-cat="process">
+            <input type="radio" name="style-cat" value="process" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🔧 过程拆解</p></div>
+          </label>
+        </div>
+        <div id="subtype-row" class="hidden grid grid-cols-2 gap-2"></div>
+      </div>
+      <!-- 模式选择 -->
+      <div class="bg-gray-800/50 rounded-lg p-3">
+        <p class="text-sm text-gray-400 mb-2">分镜模式</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors" data-mode="fixed">
+            <input type="radio" name="gen-mode" value="fixed" class="accent-brand-500">
+            <div><p class="text-xs font-semibold">⏱️ 固定模式</p><p class="text-[10px] text-gray-500">3分镜 × 15秒</p></div>
+          </label>
+          <label class="flex items-center gap-2 bg-gray-800 rounded-lg p-2.5 cursor-pointer border border-brand-500" data-mode="auto">
+            <input type="radio" name="gen-mode" value="auto" checked class="accent-brand-500">
+            <div><p class="text-xs font-semibold">🤖 智能模式</p><p class="text-[10px] text-gray-500">自动分析分镜数和时长</p></div>
+          </label>
+        </div>
+      </div>
+      <!-- 操作按钮 -->
+      <div class="flex items-center justify-between bg-gray-800 rounded-lg p-4">
+        <div><p class="font-medium" id="uploaded-filename"></p><p class="text-sm text-gray-400" id="uploaded-size"></p></div>
+        <button id="btn-replicate" class="bg-brand-600 hover:bg-brand-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+          开始复刻
+        </button>
+      </div>
+    </div>
+    <div id="replicate-progress" class="hidden mt-4">
+      <div class="bg-gray-800 rounded-lg p-4">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="pulse-dot w-2 h-2 rounded-full bg-yellow-400"></div>
+          <span class="text-yellow-400 font-medium" id="replicate-status">正在复刻...</span>
+        </div>
+        <p class="text-sm text-gray-400" id="replicate-detail"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 统计 -->
+  <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-center">
+      <p class="text-2xl font-bold text-brand-400">{{ stats.total }}</p>
+      <p class="text-xs text-gray-500 mt-1">总项目</p>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-center">
+      <p class="text-2xl font-bold text-yellow-400">{{ stats.by_status.get('generating_clips', 0) + stats.by_status.get('generating_images', 0) + stats.by_status.get('analyzing', 0) + stats.by_status.get('storyboarding', 0) }}</p>
+      <p class="text-xs text-gray-500 mt-1">进行中</p>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-center">
+      <p class="text-2xl font-bold text-green-400">{{ stats.by_status.get('done', 0) }}</p>
+      <p class="text-xs text-gray-500 mt-1">已完成</p>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-center">
+      <p class="text-2xl font-bold text-red-400">{{ stats.by_status.get('failed', 0) }}</p>
+      <p class="text-xs text-gray-500 mt-1">失败</p>
+    </div>
+  </div>
+
+  <!-- 项目列表 -->
+  <div class="bg-gray-900 rounded-xl border border-gray-800 p-6">
+    <h2 class="text-lg font-bold mb-4">最近项目</h2>
+    {% if not projects %}
+    <div class="text-center text-gray-500 py-10"><p>暂无项目，上传视频开始复刻</p></div>
+    {% else %}
+    <div class="space-y-3">
+      {% for p in projects %}
+      <a href="/project/{{ p.project_id }}" class="block bg-gray-800/50 hover:bg-gray-800 rounded-lg p-4 transition-colors">
+        <div class="flex items-center justify-between">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-mono text-sm text-brand-400">{{ p.project_id }}</span>
+              {% set sm = {'uploaded':'blue','analyzing':'yellow','storyboarding':'yellow','generating_images':'yellow','generating_clips':'yellow','merging':'yellow','done':'green','failed':'red'} %}
+              {% set sl = {'uploaded':'已上传','analyzing':'分析中','storyboarding':'制作分镜','generating_images':'生成图片','generating_clips':'生成视频','merging':'合并中','done':'已完成','failed':'失败'} %}
+              <span class="text-xs px-2 py-0.5 rounded-full bg-{{ sm.get(p.status, 'gray') }}-500/20 text-{{ sm.get(p.status, 'gray') }}-400">
+                {{ sl.get(p.status, p.status) }}
+              </span>
+            </div>
+            <p class="text-sm text-gray-400 truncate">
+              {{ p.source_video.split('/')[-1].split('\\')[-1] }}
+              {% if p.video_duration %} ({{ "%.1f"|format(p.video_duration) }}s){% endif %}
+            </p>
+          </div>
+          <div class="text-right ml-4">
+            {% if p.storyboard %}<p class="text-sm">{{ p.storyboard|length }} 个分镜</p>{% endif %}
+            <p class="text-xs text-gray-600">{{ p.created_at[:19] if p.created_at else '' }}</p>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var dz=document.getElementById('drop-zone'),vi=document.getElementById('video-input'),
+      up=document.getElementById('upload-progress'),rs=document.getElementById('replicate-section'),
+      rp=document.getElementById('replicate-progress'),br=document.getElementById('btn-replicate'),
+      fp='';
+  var SUBS={
+    drama:[{id:'micro_drama',l:'微短剧'},{id:'plot_twist',l:'反转段子'},{id:'comedy_skit',l:'喜剧段子'}],
+    visual:[{id:'cinematic',l:'电影氛围'},{id:'healing',l:'治愈ASMR'},{id:'corecore',l:'Corecore混剪'},{id:'hongkong',l:'港风'}],
+    education:[{id:'mini_tutorial',l:'迷你教程'},{id:'myth_fact',l:'辟谣/冷知识'},{id:'data_viz',l:'数据可视化'}],
+    commerce:[{id:'product_demo',l:'产品展示'},{id:'unboxing_review',l:'开箱评测'},{id:'before_after',l:'Before/After'},{id:'ugc_testimonial',l:'UGC见证'}],
+    engagement:[{id:'challenge',l:'挑战/接力'},{id:'vlog',l:'Vlog日常'},{id:'bts',l:'BTS幕后'}],
+    emotional:[{id:'nostalgia',l:'怀旧回忆'},{id:'inspiration',l:'励志故事'},{id:'lifestyle',l:'Aspirational Lifestyle'}],
+    process:[{id:'garden_renovate',l:'花园翻修'},{id:'diy_build',l:'手工制作'},{id:'cleanup_transform',l:'清洁改造'}]
+  };
+  var selectedSub='';
+  document.querySelectorAll('input[name="style-cat"]').forEach(function(r){
+    r.addEventListener('change',function(){
+      var cat=this.value;
+      var sr=document.getElementById('subtype-row');
+      selectedSub='';
+      if(!cat||!SUBS[cat]){sr.classList.add('hidden');sr.innerHTML='';return}
+      sr.innerHTML='';
+      SUBS[cat].forEach(function(s){
+        var lbl=document.createElement('label');
+        lbl.className='flex items-center gap-2 bg-gray-800 rounded-lg p-2 cursor-pointer border border-gray-700 hover:border-brand-500 transition-colors';
+        lbl.innerHTML='<input type="radio" name="style-sub" value="'+s.id+'" class="accent-brand-500"><span class="text-xs">'+s.l+'</span>';
+        lbl.querySelector('input').addEventListener('change',function(){selectedSub=this.value});
+        sr.appendChild(lbl);
+      });
+      sr.classList.remove('hidden');
+    });
+  });
+  function buildStyleString(){
+    var cat=document.querySelector('input[name="style-cat"]:checked');
+    if(!cat||!cat.value)return '';
+    var s=cat.value;
+    if(selectedSub)s+='::'+selectedSub;
+    return s;
+  }
+  dz.onclick=function(){vi.click()};
+  dz.ondragover=function(e){e.preventDefault();dz.classList.add('border-brand-500')};
+  dz.ondragleave=function(){dz.classList.remove('border-brand-500')};
+  dz.ondrop=function(e){e.preventDefault();dz.classList.remove('border-brand-500');if(e.dataTransfer.files.length)upF(e.dataTransfer.files[0])};
+  vi.onchange=function(){if(vi.files.length)upF(vi.files[0])};
+  document.querySelectorAll('input[name="gen-mode"]').forEach(function(r){
+    r.addEventListener('change',function(){
+      document.querySelectorAll('label[data-mode]').forEach(function(l){
+        l.classList.remove('border-brand-500');l.classList.add('border-gray-700')});
+      this.closest('label[data-mode]').classList.add('border-brand-500');
+      this.closest('label[data-mode]').classList.remove('border-gray-700');
+    });
+  });
+  function upF(f){
+    var fd=new FormData();fd.append('file',f);
+    up.classList.remove('hidden');
+    document.getElementById('upload-bar').style.width='50%';
+    document.getElementById('upload-status').textContent='上传中...';
+    fetch('/api/upload',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
+      if(d.error){alert(d.error);up.classList.add('hidden');return}
+      fp=d.path;
+      document.getElementById('upload-bar').style.width='100%';
+      document.getElementById('upload-status').textContent='上传完成';
+      document.getElementById('uploaded-filename').textContent=d.filename;
+      document.getElementById('uploaded-size').textContent=(d.size_mb)+' MB';
+      rs.classList.remove('hidden');
+    }).catch(function(e){alert('上传失败: '+e);up.classList.add('hidden')});
+  }
+  br.onclick=function(){
+    if(!fp)return;br.disabled=true;rs.classList.add('hidden');rp.classList.remove('hidden');
+    var style=buildStyleString();
+    var modeEl=document.querySelector('input[name="gen-mode"]:checked');
+    var mode=modeEl?modeEl.value:'auto';
+    fetch('/api/replicate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_path:fp,style:style,mode:mode})}).then(function(r){return r.json()}).then(function(d){
+      if(d.error){document.getElementById('replicate-status').textContent='失败: '+d.error;return}
+      document.getElementById('replicate-detail').textContent='任务 ID: '+d.job_id;
+      poll(d.job_id);
+    });
+  };
+  function poll(jid){
+    var iv=setInterval(function(){
+      fetch('/api/jobs/'+jid).then(function(r){return r.json()}).then(function(j){
+        if(j.status==='done'||j.status==='success'){clearInterval(iv);setTimeout(function(){location.reload()},1500)}
+        else if(j.status==='failed'){clearInterval(iv);document.getElementById('replicate-status').textContent='复刻失败';document.getElementById('replicate-detail').textContent=j.error||''}
+      });
+    },3000);
+  }
+})();
+</script>
+{% endblock %}

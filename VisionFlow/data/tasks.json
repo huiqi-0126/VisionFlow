@@ -1,0 +1,30 @@
+[
+  {
+    "task_id": "67a539e541d44d68",
+    "type": "image",
+    "status": "created",
+    "prompt": "Muscular athlete performing deadlift in a modern gym, dramatic overhead lighting, sweat droplets in slow motion, motivational energy, 4K cinematic",
+    "model": "qwen-image",
+    "niche": "fitness",
+    "api_task_id": "",
+    "local_path": "",
+    "cos_url": "",
+    "extra": "",
+    "created_at": "2026-05-29T13:41:15",
+    "completed_at": ""
+  },
+  {
+    "task_id": "f319261958c14c04",
+    "type": "video",
+    "status": "failed",
+    "prompt": "Muscular athlete performing deadlift in a modern gym, dramatic overhead lighting, sweat droplets in slow motion, motivational energy, 4K cinematic",
+    "model": "v6",
+    "niche": "fitness",
+    "api_task_id": "",
+    "local_path": "",
+    "cos_url": "",
+    "extra": "",
+    "created_at": "2026-05-29T13:41:16",
+    "completed_at": ""
+  }
+]
