@@ -371,6 +371,7 @@ class PlannerPipeline:
                     img_path = images_dir / f"day_{day:02d}_frame_{fid}.png"
                     self._media_api.download_media(img_url, img_path)
                     frame["image_file"] = str(img_path)
+                    frame["image_url"] = img_url
                     frame["image_status"] = "done"
                     # 链式参考: 每张图都成为下一张的参考图
                     # (比"所有图都参考第一张"更好: 环境/器物连贯渐变, 适合做菜步骤等连续场景,
@@ -389,6 +390,79 @@ class PlannerPipeline:
             self.plan_mgr.update_day_script(plan_id, day, target_script)
 
         return target_script
+
+
+    def generate_video_from_images_for_day(self, plan_id: str, day: int, image_frame_ids: list[int] | None = None) -> dict[str, Any]:
+        """Generate a video using a day's completed images as start/end references."""
+        plan = self.plan_mgr.get_plan(plan_id)
+        if not plan:
+            raise ValueError(f"Plan {plan_id} not found")
+        script = next((item for item in plan.get("scripts", []) if item.get("day") == day), None)
+        if not script:
+            raise ValueError(f"Script for day {day} not found")
+        selected_ids = set(image_frame_ids or [])
+        frames = [
+            frame for index, frame in enumerate(script.get("frames", []), 1)
+            if frame.get("image_status") == "done" and frame.get("image_file")
+            and (not selected_ids or int(frame.get("frame_id", index)) in selected_ids)
+        ]
+        if not frames:
+            raise ValueError("Generate at least one image before creating a reference video")
+
+        self._ensure_media_clients()
+        assert self._media_api is not None
+        assert self._cos is not None
+
+        def reference_url(frame: dict[str, Any]) -> str:
+            return frame.get("image_url") or self._cos.upload_file(frame["image_file"])
+
+        # The video provider accepts up to seven ordered references in one
+        # request. Passing them together retains the complete visual story
+        # without creating separate clips or re-encoding locally.
+        if len(frames) > 7:
+            raise ValueError("A video request can use at most 7 reference images")
+        reference_urls = [reference_url(frame) for frame in frames]
+        beats = " ".join(
+            (frame.get("caption") or frame.get("image_description") or "")[:180]
+            for frame in frames
+        )
+        prompt = (
+            "Create a fast-paced, information-dense 15-second vertical 9:16 video using ALL supplied reference images in their exact order. "
+            "Treat the image list as an ordered storyboard: clearly visit each reference composition, use clean motivated transitions, and preserve the same people, pets, clothing, objects, room geometry and lighting. "
+            "Do not invent scenes, people, props, text, logos or UI. Keep every action physically plausible and finish on the final reference image. "
+            f"Storyboard beats: {beats}"
+        )
+        task_id = self._media_api.generate_video(
+            prompt=prompt,
+            model=self.settings.default_video_model,
+            size=self.settings.default_size,
+            duration="15",
+            pic=reference_urls[0],
+            end_pic=reference_urls[1] if len(reference_urls) > 1 else None,
+            pics=reference_urls[2:] or None,
+            video_type="1",
+        )
+        result = self._media_api.poll_video(task_id)
+        if result.get("status") != "success" or not result.get("url"):
+            script["video_status"] = "failed"
+            self.plan_mgr.update_day_script(plan_id, day, script)
+            raise RuntimeError("Multi-reference image video generation failed")
+        videos_dir = Path(plan["output_dir"]) / "videos"
+        videos_dir.mkdir(parents=True, exist_ok=True)
+        video_path = videos_dir / f"day_{day:02d}_from_images.mp4"
+        self._media_api.download_media(result["url"], video_path)
+        script.update({
+            "video_file": str(video_path),
+            "video_url": result["url"],
+            "video_status": "done",
+            "video_source": "multi_image_references",
+            "video_reference_images": [frame["image_file"] for frame in frames],
+            "video_reference_frame_ids": [frame.get("frame_id", index + 1) for index, frame in enumerate(frames)],
+            "video_reference_urls": reference_urls,
+            "video_task_id": task_id,
+        })
+        self.plan_mgr.update_day_script(plan_id, day, script)
+        return script
 
     def regenerate_script_for_day(self, plan_id: str, day: int) -> dict[str, Any]:
         """重新生成特定某一天的脚本"""

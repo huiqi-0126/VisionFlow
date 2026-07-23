@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import subprocess
 import threading
 import uuid
 from datetime import datetime, timedelta
@@ -126,6 +128,53 @@ def _run_generate_images(job_id: str, plan_id: str, day: int) -> None:
             _jobs[job_id]["status"] = "failed"
             _jobs[job_id]["error"] = str(exc)
 
+
+def _run_generate_video_from_images(job_id: str, plan_id: str, day: int, image_frame_ids: list[int] | None = None) -> None:
+    try:
+        planner_pipe = PlannerPipeline(settings, plan_mgr=plan_mgr)
+        script = planner_pipe.generate_video_from_images_for_day(plan_id, day, image_frame_ids=image_frame_ids)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = script.get("video_status", "failed")
+            _jobs[job_id]["video_file"] = script.get("video_file")
+    except Exception as exc:
+        logger.error("Image-referenced video job %s failed: %s", job_id, exc)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(exc)
+
+
+def _run_smart_cut(job_id: str, reference: Path, sources: list[Path], title: str, accent: str, use_reference_audio: bool, output_dir: Path) -> None:
+    try:
+        ffmpeg = shutil.which("ffmpeg")
+        ffprobe = shutil.which("ffprobe")
+        if not ffmpeg or not ffprobe:
+            raise RuntimeError("Smart Cut requires ffmpeg and ffprobe on PATH. Install FFmpeg or configure it before rendering.")
+        skill_dir = _PROJECT_ROOT.parent / "quick-cut"
+        analyze_script = skill_dir / "scripts" / "analyze_reference.py"
+        build_script = skill_dir / "scripts" / "build_quick_cut.py"
+        if not analyze_script.is_file() or not build_script.is_file():
+            raise RuntimeError("quick-cut skill scripts are missing")
+        analysis = output_dir / "reference-analysis.json"
+        final_video = output_dir / "smart-cut.mp4"
+        subprocess.run([sys.executable, str(analyze_script), "--reference", str(reference), "--output", str(analysis)], check=True, capture_output=True, text=True, timeout=180)
+        command = [sys.executable, str(build_script), "--reference", str(reference), "--sources", *[str(source) for source in sources], "--title", title, "--output", str(final_video)]
+        if accent.strip():
+            command += ["--accent", accent.strip()]
+        else:
+            command += ["--all-white"]
+        if not use_reference_audio:
+            command += ["--no-reference-audio"]
+        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=900)
+        manifest = final_video.with_suffix(".quick-cut.json")
+        if not final_video.is_file():
+            raise RuntimeError("quick-cut completed without a final video")
+        with _jobs_lock:
+            _jobs[job_id].update({"status": "done", "video_file": str(final_video), "analysis_file": str(analysis), "manifest_file": str(manifest) if manifest.is_file() else None, "log": result.stdout[-2000:]})
+    except Exception as exc:
+        logger.error("Smart Cut job %s failed: %s", job_id, exc)
+        with _jobs_lock:
+            _jobs[job_id].update({"status": "failed", "error": str(exc)})
+
 def _run_regenerate_script(job_id: str, plan_id: str, day: int) -> None:
     """后台重新生成单天脚本"""
     try:
@@ -202,6 +251,11 @@ async def page_planner(request: Request):
         "plans": plans,
     })
 
+
+
+@app.get("/smart-cut", response_class=HTMLResponse)
+async def page_smart_cut(request: Request):
+    return templates.TemplateResponse("smart_cut.html", {"request": request, "page_id": "smart_cut"})
 
 @app.get("/plan/{plan_id}", response_class=HTMLResponse)
 async def page_plan_detail(request: Request, plan_id: str):
@@ -350,6 +404,33 @@ async def api_create_plan(request: Request):
 
     return {"job_id": job_id, "status": "started"}
 
+
+@app.post("/api/smart-cut")
+async def api_smart_cut(reference: UploadFile = File(...), sources: list[UploadFile] = File(...), title: str = "", accent: str = "", use_reference_audio: bool = False):
+    if not title.strip():
+        return JSONResponse({"error": "Caption Title is required"}, status_code=400)
+    if not reference.filename or not sources:
+        return JSONResponse({"error": "Reference video and at least one source video are required"}, status_code=400)
+    allowed = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+    if Path(reference.filename).suffix.lower() not in allowed or any(Path(item.filename or "").suffix.lower() not in allowed for item in sources):
+        return JSONResponse({"error": "Unsupported video format"}, status_code=400)
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = _PROJECT_ROOT / "output" / "smart_cuts" / job_id
+    source_dir = job_dir / "sources"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    reference_path = job_dir / ("reference" + Path(reference.filename).suffix.lower())
+    reference_path.write_bytes(await reference.read())
+    source_paths = []
+    for index, item in enumerate(sources, 1):
+        path = source_dir / f"source_{index:02d}{Path(item.filename or '').suffix.lower()}"
+        path.write_bytes(await item.read())
+        source_paths.append(path)
+    with _jobs_lock:
+        _jobs[job_id] = {"id": job_id, "type": "smart_cut", "status": "running", "title": title.strip(), "output_dir": str(job_dir)}
+    thread = threading.Thread(target=_run_smart_cut, args=(job_id, reference_path, source_paths, title.strip(), accent, use_reference_audio, job_dir), daemon=True)
+    thread.start()
+    return {"job_id": job_id, "status": "started"}
+
 @app.get("/api/media")
 async def api_media(path: str = Query(...)):
     """直接服务本地媒体文件"""
@@ -404,6 +485,22 @@ async def api_plan_generate_images(plan_id: str, day: int):
     )
     t.start()
 
+    return {"job_id": job_id, "status": "started"}
+
+
+@app.post("/api/plans/{plan_id}/day/{day}/generate_video_from_images")
+async def api_plan_generate_video_from_images(plan_id: str, day: int, request: Request):
+    data = await request.json()
+    raw_ids = data.get("image_frame_ids", [])
+    try:
+        image_frame_ids = [int(value) for value in raw_ids]
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "image_frame_ids must be integers"}, status_code=400)
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {"id": job_id, "type": "generate_video_from_images", "status": "running", "plan_id": plan_id, "day": day, "image_frame_ids": image_frame_ids}
+    thread = threading.Thread(target=_run_generate_video_from_images, args=(job_id, plan_id, day, image_frame_ids), daemon=True)
+    thread.start()
     return {"job_id": job_id, "status": "started"}
 
 @app.post("/api/plans/{plan_id}/day/{day}/regenerate_script")

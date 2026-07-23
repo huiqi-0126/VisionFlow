@@ -34,6 +34,15 @@
         <button onclick="fillPreset('continuity_hands')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：手部演示</button>
         <button onclick="fillPreset('continuity_studio')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：固定工作台</button>
         <button onclick="fillPreset('continuity_host')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：固定出镜者</button>
+        <button onclick="fillPreset('continuity_kitchen')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：厨房记录者</button>
+        <button onclick="fillPreset('continuity_home')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：居家生活记录者</button>
+        <button onclick="fillPreset('continuity_neighborhood')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：街区慢生活记录者</button>
+        <button onclick="fillPreset('continuity_bookshop')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：书店探访者</button>
+        <button onclick="fillPreset('continuity_market')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：旧物市集记录者</button>
+        <button onclick="fillPreset('continuity_sketch')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：城市速写者</button>
+        <button onclick="fillPreset('continuity_city_life')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">城市生活观察者</button>
+        <button onclick="fillPreset('continuity_pet_life')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">宠物日常记录者</button>
+        <button onclick="fillPreset('continuity_weekend_trip')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">周末轻旅行记录者</button>
         <button onclick="fillPreset('indoor')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">室内装修设计师</button>
         <button onclick="fillPreset('outdoor')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">室外庭院规划师</button>
         <button onclick="fillPreset('cabinet')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">橱柜品牌专家</button>
@@ -225,6 +234,78 @@
 
 <script>
 const presetPersonas = {
+  continuity_city_life: {
+    age: 29, gender: 'female', ethnicity: 'East Asian American', location: 'a changing but walkable city neighborhood', language: 'English', accent: 'Standard American',
+    occupation: 'Urban life observer', experience_years: 4,
+    personal_tags: 'city observations, cafes, public spaces, small local rituals, one cross-body bag, neighborhood walks',
+    target_audience: 'People who enjoy grounded city-life stories', personality: 'Observant, curious, lightly humorous',
+    content_style: 'Each episode follows one small city errand or observation through a new but compact route of two or three adjacent places: a station entrance, cafe, small shop, plaza, or park. The scene set can change next episode. Within an episode, keep the same route direction, time of day, outfit, bag, and one simple purpose; avoid crowds, fast traffic, or complex interactions.',
+    portrait_description: '29-year-old East Asian American woman with straight dark hair cut just below the chin, average build, a consistent casual urban style of a neutral overshirt, plain T-shirt, straight-leg jeans, and low-top sneakers. She carries one small black cross-body bag. For each episode, lock the exact outfit colors, hairstyle, bag, weather, and daylight before generating. Use medium-wide, side, over-the-shoulder, or back views; no close-up face shots.'
+  },
+  continuity_pet_life: {
+    age: 31, gender: 'male', ethnicity: 'Caucasian American', location: 'home and a nearby pet-friendly route', language: 'English', accent: 'Standard American',
+    occupation: 'Pet daily-life recorder', experience_years: 4,
+    personal_tags: 'one dog, home routines, short walks, pet-friendly errands, same leash and bag',
+    target_audience: 'Pet owners who enjoy calm, relatable daily moments', personality: 'Patient, warm, observant',
+    content_style: 'Every episode follows one simple pet routine: leaving home, a short walk, stopping at a quiet outdoor table, or returning home. The route can vary next episode, but each episode uses only two or three connected stops. Keep the dog, collar, leash, harness, bag, outfit, weather, and walk direction identical throughout the episode. Use simple walking, sitting, offering water, or placing a toy; no running, crowded dog interactions, or complicated training actions.',
+    portrait_description: '31-year-old Caucasian American man with short brown hair, average build, a consistent casual style of a navy overshirt, heather-gray T-shirt, black jeans, and white sneakers. He carries one dark green treat pouch and holds the same black leash. His dog is always the same medium-sized golden-brown mixed-breed dog with a white chest patch, floppy ears, and a plain red collar. For each episode, lock exact outfit and weather. Show side, back, hands, dog, or medium-wide views; no close-up faces.'
+  },
+  continuity_weekend_trip: {
+    age: 34, gender: 'female', ethnicity: 'Latina American', location: 'a new short weekend outing each episode', language: 'English', accent: 'Standard American',
+    occupation: 'Weekend micro-trip recorder', experience_years: 5,
+    personal_tags: 'day trips, one compact car, local stays, scenic stops, one travel bag, slow observations',
+    target_audience: 'People looking for small, accessible weekend outings', personality: 'Relaxed, practical, quietly adventurous',
+    content_style: 'Each episode is one short outing with a new scene package, such as a roadside cafe, one historic street, a lakeside path, or a small cabin exterior. Use the same car as the primary visual anchor, then limit the episode to two or three connected stops. Keep one outfit, one weekend bag, weather, time of day, and travel direction consistent inside the episode. Prefer arrivals, walking a short path, setting down a bag, or looking at a view; avoid vehicles in motion, crowds, and rapid location jumps.',
+    portrait_description: '34-year-old Latina American woman with long dark brown hair in one low ponytail, average build, a consistent travel style of a sand-colored utility jacket, black crew-neck top, dark blue jeans, and tan hiking sneakers. She carries one olive canvas weekend bag and drives the same compact dark green hatchback. For each episode, lock exact outfit, hair, car, weather, and daylight. Use medium-wide, side, back, and over-the-shoulder views; no close-up face shots.'
+  },
+  continuity_bookshop: {
+    age: 30, gender: 'male', ethnicity: 'African American', location: 'one independent neighborhood bookshop', language: 'English', accent: 'Standard American',
+    occupation: 'Independent bookshop diary creator', experience_years: 4,
+    personal_tags: 'bookshop visit, same route, browsing shelves, reading table, one tote bag, quiet observations',
+    target_audience: 'Readers who enjoy quiet local discoveries', personality: 'Curious, thoughtful, understated',
+    content_style: 'One visit unfolds along a connected route: the same painted shopfront, one fiction aisle, and the window reading table. Each episode chooses one or two adjacent points on this route. Show browsing, pulling out one book, or setting a book beside coffee; preserve the same bag, shelves, daylight, and direction of movement.',
+    portrait_description: '30-year-old African American man with closely cropped black hair, average build, wearing the exact same camel overshirt, charcoal T-shirt, dark indigo jeans, and brown leather sneakers throughout the episode. He carries one plain cream canvas tote bag. Same independent bookshop: forest-green facade, warm wood shelves, brass reading lamp, window table on the left. Medium-wide, over-the-shoulder, or back views; no close-up face shots.'
+  },
+  continuity_market: {
+    age: 28, gender: 'female', ethnicity: 'Middle Eastern American', location: 'one small covered weekend flea market', language: 'English', accent: 'Standard American',
+    occupation: 'Secondhand find diary creator', experience_years: 3,
+    personal_tags: 'same market aisle, one reusable bag, vintage objects, adjacent stalls, natural browsing',
+    target_audience: 'People who enjoy secondhand finds and small local outings', personality: 'Playful, observant, practical',
+    content_style: 'One outing follows a short contiguous market route: entrance sign, the ceramics stall, and the record stall. Choose only one purchase-sized object per episode. Keep the same covered-market light, reusable bag, walking direction, and object in hand; avoid busy crowd interactions, wardrobe swaps, or showing multiple unrelated finds.',
+    portrait_description: '28-year-old Middle Eastern American woman with dark curly hair in one low ponytail, average build, wearing the exact same faded blue denim overshirt, black crew-neck T-shirt, olive trousers, and white low-top sneakers throughout the episode. She carries one mustard-yellow canvas shopping bag. Same covered flea market with cream canopy, wooden vendor tables, blue-and-white ceramics, and one record bin. Side, back, or medium-wide framing; no close-up face shots.'
+  },
+  continuity_sketch: {
+    age: 26, gender: 'nonbinary', ethnicity: 'Asian American', location: 'one walkable downtown block', language: 'English', accent: 'Standard American',
+    occupation: 'Urban sketch diary creator', experience_years: 5,
+    personal_tags: 'one sketchbook, repeatable city block, cafe window, park steps, same satchel, observational drawing',
+    target_audience: 'People who enjoy drawing and everyday city details', personality: 'Quietly curious, patient, visual',
+    content_style: 'A single observational walk may move from the brick street corner to the cafe window and nearby park steps. The sketchbook is the visual anchor: open it, make a few marks, or compare it to the view. Stay within one block and one daylight period; preserve the same route, satchel, outfit, and sketchbook page within an episode.',
+    portrait_description: '26-year-old Asian American nonbinary person with short straight black hair, slim build, wearing the exact same dark moss-green chore jacket, off-white T-shirt, loose black trousers, and gray canvas sneakers throughout the episode. They carry one tan cross-body satchel and an A5 black sketchbook. Same red-brick downtown block, blue cafe awning, large cafe window, and stone park steps. Use over-the-shoulder, side, hands, or medium-wide shots; no close-up face shots.'
+  },
+  continuity_kitchen: {
+    age: 29, gender: 'female', ethnicity: 'Latina American', location: 'one sunlit apartment kitchen', language: 'English', accent: 'Standard American',
+    occupation: 'Home kitchen diary creator', experience_years: 4,
+    personal_tags: 'same compact kitchen, recipe diary, simple ingredients, one outfit per episode, natural cooking actions',
+    target_audience: 'People who enjoy relaxed, practical home cooking', personality: 'Warm, observant, lightly humorous',
+    content_style: 'A small kitchen diary with up to three connected zones: the pale wood counter, the stove, and the small dining table. Each video follows one simple action sequence such as prep to cook to plate. Keep the same outfit, hairstyle, daylight direction, cookware, and kitchen layout throughout one episode.',
+    portrait_description: '29-year-old Latina American woman with dark brown hair in one low bun, medium build, wearing the exact same rust-colored short-sleeve knit top and dark blue straight-leg jeans for the whole episode. Same small apartment kitchen: pale wood cabinets, white tile backsplash, black induction stove, one small basil plant by the window, daylight from the left. Show side profile, back, or hands; avoid close-up face shots.'
+  },
+  continuity_home: {
+    age: 33, gender: 'male', ethnicity: 'South Asian American', location: 'one lived-in one-bedroom apartment', language: 'English', accent: 'Standard American',
+    occupation: 'Slow home-life diary creator', experience_years: 5,
+    personal_tags: 'same apartment, daily routines, limited room set, fixed casual outfit, natural transitions',
+    target_audience: 'Viewers who enjoy calm everyday routines', personality: 'Thoughtful, practical, quietly upbeat',
+    content_style: 'A gentle routine video that may move between only three connected spaces in the same apartment: entryway, living-room desk, and balcony door. Use simple actions such as putting down keys, watering one plant, or arranging a book. Preserve the apartment layout and use a continuous walking direction between spaces; no teleporting, transformations, or new furniture.',
+    portrait_description: '33-year-old South Asian American man with short black hair and a neatly trimmed beard, average build, wearing the exact same olive-green overshirt over a plain cream T-shirt, dark jeans, and white canvas sneakers throughout the episode. Same warm-white apartment with a walnut entry shelf, gray fabric sofa, oak desk, two leafy plants, and daylight from the balcony on the right. Medium-wide views only; no close-up face shots.'
+  },
+  continuity_neighborhood: {
+    age: 27, gender: 'female', ethnicity: 'Caucasian American', location: 'one walkable neighborhood near home', language: 'English', accent: 'Standard American',
+    occupation: 'Neighborhood diary creator', experience_years: 3,
+    personal_tags: 'same local route, neighborhood walk, one cafe exterior, one park bench, fixed outfit, natural daylight',
+    target_audience: 'Viewers who enjoy local everyday observations', personality: 'Curious, relaxed, personable',
+    content_style: 'A short neighborhood diary constrained to one repeatable route: apartment entrance, the same corner cafe exterior, and the same small park bench. Use only one or two adjacent stops per video. Keep the weather, time of day, walking direction, and outfit consistent inside an episode; use simple observational actions, not crowded interactions.',
+    portrait_description: '27-year-old Caucasian American woman with shoulder-length wavy auburn hair, average build, wearing the exact same navy denim jacket, plain white crew-neck T-shirt, black straight-leg trousers, and tan low-top sneakers throughout the episode. Same leafy residential street, brick corner cafe with dark green awning, and small park with one wooden bench. Over-the-shoulder, back, or medium-wide framing; no close-up face shots.'
+  },
   continuity_hands: {
     age: 30, gender: 'unspecified', ethnicity: 'not shown', location: 'a single indoor tabletop set', language: 'English', accent: 'not applicable',
     occupation: 'Hands-only practical demonstrator', experience_years: 5,

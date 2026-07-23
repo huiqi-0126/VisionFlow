@@ -75,7 +75,7 @@ class ContinuityPlannerPipeline(PlannerPipeline):
                     # GKAPI requires URL references; COS makes the locally extracted
                     # last frame available to the next request.
                     if self._cos is not None:
-                        reference_url = self._cos.upload_file(handoff, prefix=f"visionflow/handoffs/{plan_id}")
+                        reference_url = self._cos.upload_file(handoff)
                     clips.append(clip)
                 final = videos_dir / f"day_{day:02d}.mp4"
                 self._concat(clips, final, work_dir)

@@ -90,6 +90,7 @@ Authorization: Bearer dp_sk_your_api_key
 | `gemini-3.1-flash` | Nano Banana 2 | 1080p |
 | `gemini-3.0` | Nano Banana Pro | 2160p |
 | `gemini-2.5-flash` | Nano Banana | 1080p |
+| `gpt-image-2.0` | GPT Image 2 | 2160p（仅支持 1080p / 2160p） |
 
 ### 视频模型
 
@@ -107,6 +108,8 @@ Authorization: Bearer dp_sk_your_api_key
 | `seedance-2.0-standard` | Seedance 2.0 standard  | 1080p | 4~15 秒（任意整数） |
 
 > 可用分辨率：`720p`、`1080p`、`1800p`、`2160p`。选择的分辨率不能超过该模型的最大分辨率，否则系统会自动降级到模型支持的最大分辨率。
+>
+> 注意：`gpt-image-2.0` 仅开放 `1080p` 和 `2160p` 两档定价；其支持的宽高比为 `1:1`、`16:9`、`9:16`、`4:3`、`3:4`、`3:2`、`2:3`、`2:1`、`1:2`、`21:9`（不支持 `5:4`、`4:5`）。
 
 ---
 
@@ -289,6 +292,9 @@ Content-Type: application/json
 | `audio` | boolean | ❌ | 是否带声音，`true` 表示生成带音频的视频。不传则不带声音 |
 | `aspectRatio` | string | ❌ | 宽高比，可选值：`1:1`、`16:9`、`9:16`、`4:3`、`3:4`、`5:4`、`4:5`、`3:2`、`2:3`、`21:9`。不传则由模型自行决定 |
 | `pic` | string | ❌ | 参考图片，用于图生视频。支持以下格式：① 图片 URL（`https://` 或 `https://` 开头）；② Base64 编码（`data:image/xxx;base64,...` 格式或纯 Base64 字符串）。传入非图片内容时将被忽略 |
+| `pic2` | string | ❌ | 第二张参考图片，用于多图模式。格式与 `pic` 相同（图片 URL 或 Base64 编码）。传入两张图时将启用首尾帧/参考图模式 |
+| `pics` | string[] | ❌ | 更多参考图片（第3张起），元素格式与 `pic` 相同。与 `pic`/`pic2` 合并为完整图片列表，最多共 7 张（`seedance-2.0` 模型最多 9 张）。传入 2 张及以上图片时启用多图模式 |
+| `videoType` | string | ❌ | 多图模式选择，仅在传入 2 张图片时生效。`"0"` = 首尾帧模式（默认），`"1"` = 参考图模式。仅传一张图时忽略此参数；**超过 2 张图时强制按参考图模式处理** |
 
 **请求示例**（文生视频）：
 
@@ -315,6 +321,54 @@ Content-Type: application/json
   "pic": "https://example.com/seaside.jpg"
 }
 ```
+
+**请求示例**（首尾帧模式）：
+
+```json
+{
+  "prompt": "从白天过渡到黑夜的城市天际线",
+  "model": "v6",
+  "size": "1080p",
+  "duration": "8",
+  "aspectRatio": "16:9",
+  "pic": "https://example.com/day.jpg",
+  "pic2": "https://example.com/night.jpg",
+  "videoType": "0"
+}
+```
+
+**请求示例**（参考图模式）：
+
+```json
+{
+  "prompt": "以指定风格生成视频",
+  "model": "v6",
+  "size": "1080p",
+  "duration": "8",
+  "aspectRatio": "16:9",
+  "pic": "https://example.com/style.jpg",
+  "pic2": "https://example.com/content.jpg",
+  "videoType": "1"
+}
+```
+
+**请求示例**（3张及以上图片 · 参考图模式）：
+
+```json
+{
+  "prompt": "清晨、正午、黄昏三个时段的城市主角",
+  "model": "v6",
+  "size": "1080p",
+  "duration": "8",
+  "aspectRatio": "16:9",
+  "pic": "https://example.com/person.jpg",
+  "pic2": "https://example.com/city.jpg",
+  "pics": ["https://example.com/style.jpg"],
+  "videoType": "1"
+}
+```
+
+> `pics` 为数组，与 `pic`/`pic2` 合并后按顺序作为完整图片列表，最多共 7 张（`seedance-2.0` 为 9 张）。2 张图片时按 `videoType` 选择首尾帧或参考图模式；**超过 2 张时仅支持参考图模式**（无论 `videoType` 传何值都按参考图模式处理）。
 
 ### 响应
 
@@ -367,6 +421,36 @@ curl -X POST https://{base-url}/v1/videos/generations \
     "pic": "https://example.com/seaside.jpg"
   }'
 ```
+
+# 首尾帧模式
+curl -X POST https://{base-url}/v1/videos/generations \
+  -H "Authorization: Bearer dp_sk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "从白天过渡到黑夜的城市天际线",
+    "model": "v6",
+    "size": "1080p",
+    "duration": "8",
+    "aspectRatio": "16:9",
+    "pic": "https://example.com/day.jpg",
+    "pic2": "https://example.com/night.jpg",
+    "videoType": "0"
+  }'
+
+# 参考图模式
+curl -X POST https://{base-url}/v1/videos/generations \
+  -H "Authorization: Bearer dp_sk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "以指定风格生成视频",
+    "model": "v6",
+    "size": "1080p",
+    "duration": "8",
+    "aspectRatio": "16:9",
+    "pic": "https://example.com/style.jpg",
+    "pic2": "https://example.com/content.jpg",
+    "videoType": "1"
+  }'
 
 ### Python 示例
 
@@ -421,6 +505,38 @@ response = requests.post(
         "duration": "8",
         "aspectRatio": "16:9",
         "pic": pic_base64,
+    },
+)
+
+# 首尾帧模式（使用两张参考图片）
+response = requests.post(
+    f"{BASE_URL}/v1/videos/generations",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    json={
+        "prompt": "从白天过渡到黑夜的城市天际线",
+        "model": "v6",
+        "size": "1080p",
+        "duration": "8",
+        "aspectRatio": "16:9",
+        "pic": "https://example.com/day.jpg",
+        "pic2": "https://example.com/night.jpg",
+        "videoType": "0",
+    },
+)
+
+# 参考图模式（使用两张参考图片）
+response = requests.post(
+    f"{BASE_URL}/v1/videos/generations",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+    json={
+        "prompt": "以指定风格生成视频",
+        "model": "v6",
+        "size": "1080p",
+        "duration": "8",
+        "aspectRatio": "16:9",
+        "pic": "https://example.com/style.jpg",
+        "pic2": "https://example.com/content.jpg",
+        "videoType": "1",
     },
 )
 ```
@@ -533,7 +649,7 @@ while True:
 | 错误码 | 常量名 | 说明 |
 |--------|--------|------|
 | 10001 | `INSUFFICIENT_BALANCE` | 用户余额不足 |
-| 10002 | `FREEZE_CONFLICT` | 额度冻结冲突（并发导致） |
+| 10002 | `FREEZE_CONFLICT` | 积分冻结冲突（并发导致） |
 | 10003 | `TASK_NOT_FOUND` | 任务不存在 |
 | 10004 | `TASK_ALREADY_DONE` | 任务已完成或已取消 |
 | 10005 | `NO_AVAILABLE_EMAIL` | 无可用服务资源 |
@@ -561,7 +677,7 @@ while True:
     │  {prompt, model, size,         │
     │   aspectRatio}                 │
     │───────────────────────────────>│
-    │                                │   冻结额度 → 下发任务
+    │                                │   冻结积分 → 下发任务
     │  {id, created, data}           │
     │<───────────────────────────────│   ⚡ 立即返回任务 ID
     │                                │
@@ -601,7 +717,7 @@ while True:
     │   duration, audio,             │
     │   aspectRatio}                 │
     │───────────────────────────────>│
-    │                                │   冻结额度 → 下发任务
+    │                                │   冻结积分 → 下发任务
     │  {id, status:"processing"}     │
     │<───────────────────────────────│   ⚡ 立即返回任务 ID
     │                                │
@@ -626,24 +742,24 @@ while True:
     │                                │
 ```
 
-### 额度流转示意
+### 积分流转示意
 
 ```
   发起请求           生成中            生成完成
   ────────          ──────           ────────
 
   ┌─────────┐                        ┌─────────┐
-  │ 可用额度 │ ──── 冻结 ────>        │ 冻结额度 │
+   │ 可用积分 │ ──── 冻结 ────>        │ 冻结积分 │
   │   1000  │      -10              │    10   │
   │         │ <─── 退回 ────        │         │
   └─────────┘   (仅失败时)          └─────────┘
                                     │
                               成功 ──┼── 确认扣减
-                              失败 ──┼── 退回额度
+                              失败 ──┼── 退回积分
                                     │
 ```
 
-> 💡 请求发起时系统会**冻结**对应额度；生成成功后正式扣减，失败则自动退回。
+> 💡 请求发起时系统会**冻结**对应积分；生成成功后正式扣减，失败则自动退回。
 
 ---
 
@@ -673,11 +789,11 @@ while True:
 **Q: 生成需要多长时间？**
 A: 图片通常 10~30 秒，视频通常 30~120 秒，具体取决于内容复杂度和当前负载。
 
-**Q: 额度不足时会怎样？**
+**Q: 积分不足时会怎样？**
 A: 请求会被拒绝，返回余额不足错误（错误码 10001）。请充值后重试。
 
 **Q: 生成失败会扣费吗？**
-A: 不会。生成失败时冻结的额度会自动退回到您的账户。
+A: 不会。生成失败时冻结的积分会自动退回到您的账户。
 
 **Q: 结果 URL 有效期是多久？**
 A: 请在获取结果后及时下载保存，URL 可能会在一段时间后失效。

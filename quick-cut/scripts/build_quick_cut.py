@@ -22,12 +22,14 @@ def run(command: list[str]) -> None:
 def find_font(italic: bool = False) -> str:
     candidates = (
         [
+            "C:/Windows/Fonts/arialbi.ttf",
             "/System/Library/Fonts/HelveticaNeue.ttc",
             "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
         ]
         if italic
         else [
+            "C:/Windows/Fonts/arialbd.ttf",
             "/System/Library/Fonts/HelveticaNeue.ttc",
             "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",

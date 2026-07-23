@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Smart Cut - VisionFlow{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="mb-7"><h1 class="text-2xl font-bold">Smart Cut</h1><p class="text-sm text-gray-400 mt-2">Match a reference video?s cut rhythm with your own source clips. The originals remain unchanged.</p></div>
+  <form id="smartCutForm" class="space-y-5 bg-gray-900/60 border border-gray-800 rounded-xl p-6">
+    <div><label class="block text-sm font-medium mb-2">Reference video</label><input name="reference" type="file" accept="video/*" required class="block w-full text-sm"/><p class="text-xs text-gray-500 mt-1">Used only to analyze pacing, cuts, framing and optional audio rhythm.</p></div>
+    <div><label class="block text-sm font-medium mb-2">Source videos</label><input name="sources" type="file" accept="video/*" multiple required class="block w-full text-sm"/><p class="text-xs text-gray-500 mt-1">Add one or more clips. More angles give the editor better cut mapping.</p></div>
+    <div><label class="block text-sm font-medium mb-2">Caption Title</label><input name="title" required maxlength="80" placeholder="FOCUS ON DESIGN" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"/></div>
+    <div><label class="block text-sm font-medium mb-2">Accent words <span class="text-gray-500">(optional)</span></label><input name="accent" maxlength="80" placeholder="ON DESIGN" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"/></div>
+    <label class="flex items-center gap-2 text-sm"><input name="use_reference_audio" type="checkbox" class="accent-indigo-500"/> Use the reference video?s audio rhythm</label>
+    <button id="smartCutSubmit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-medium">Analyze and render</button>
+  </form>
+  <div id="smartCutResult" class="hidden mt-5 bg-gray-900/60 border border-gray-800 rounded-xl p-5 text-sm"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const form=document.getElementById('smartCutForm'), button=document.getElementById('smartCutSubmit'), result=document.getElementById('smartCutResult');
+form.addEventListener('submit', event => { event.preventDefault(); const data=new FormData(form); if (!data.get('title').trim()) return alert('Caption Title is required.'); button.disabled=true; button.textContent='Analyzing and rendering...'; fetch('/api/smart-cut',{method:'POST',body:data}).then(r=>r.json()).then(payload=>{if(!payload.job_id)throw new Error(payload.error||'Unable to start'); const poll=()=>fetch('/api/jobs/'+payload.job_id).then(r=>r.json()).then(job=>{if(job.status==='running')return setTimeout(poll,3000); button.disabled=false; button.textContent='Analyze and render'; result.classList.remove('hidden'); if(job.status==='done'){result.innerHTML=`<p class="text-green-400 mb-3">Smart Cut complete.</p><a class="text-indigo-300 underline" target="_blank" href="/api/media?path=${encodeURIComponent(job.video_file)}">View final video</a>`;}else{result.innerHTML=`<p class="text-red-400">Smart Cut failed: ${job.error||'Unknown error'}</p>`;}});poll();}).catch(error=>{button.disabled=false;button.textContent='Analyze and render';alert(error.message);});});
+</script>
+{% endblock %}

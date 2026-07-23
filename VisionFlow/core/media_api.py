@@ -42,7 +42,7 @@ class MediaAPIClient:
         model: str = "gemini-3.0",
         size: str = "1080p",
         aspect_ratio: str | None = None,
-        pic: str | None = None,
+        pic: str | list[str] | None = None,
     ) -> str:
         """提交图片生成任务，返回 task_id"""
         url = f"{self.base_url}/v1/images/generations"
@@ -87,6 +87,7 @@ class MediaAPIClient:
         aspect_ratio: str | None = None,
         pic: str | None = None,
         end_pic: str | None = None,
+        pics: list[str] | None = None,
         video_type: str = "1",
     ) -> str:
         """提交视频生成任务，返回 task_id
@@ -110,13 +111,17 @@ class MediaAPIClient:
         if end_pic:
             body["pic2"] = end_pic
             body["videoType"] = video_type
+        if pics:
+            body["pics"] = pics
 
         resp = requests.post(url, headers=self._headers, json=body, timeout=30)
-        resp.raise_for_status()
+        if not resp.ok:
+            detail = resp.text.strip()[:1500]
+            raise RuntimeError(f"Video generation request failed (HTTP {resp.status_code}): {detail or 'empty response'}")
         data = resp.json()
 
         if "error" in data:
-            raise RuntimeError(f"视频生成请求失败: {data['error'].get('message', data)}")
+            raise RuntimeError(f"Video generation request failed: {data['error'].get('message', data)}")
 
         task_id = data.get("id", "")
         if not task_id:
