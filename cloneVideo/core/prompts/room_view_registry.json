@@ -1,0 +1,33 @@
+{
+  "_comment": "室内装修视频复刻 - 房间类型 / 视角 / 4秒运镜注册表 + 镜头规划 prompt。shot_planner.py 加载本文件。",
+  "room_types": [
+    {"id": "living_room",     "cn": "客厅",     "en": "living room"},
+    {"id": "master_bedroom",  "cn": "主卧",     "en": "master bedroom"},
+    {"id": "second_bedroom",  "cn": "次卧",     "en": "secondary bedroom"},
+    {"id": "kitchen",         "cn": "厨房",     "en": "modern kitchen"},
+    {"id": "bathroom",        "cn": "卫生间",   "en": "bathroom"},
+    {"id": "dining_area",     "cn": "餐厅",     "en": "dining area"},
+    {"id": "study",           "cn": "书房",     "en": "home study / office"},
+    {"id": "entryway",        "cn": "玄关",     "en": "entryway foyer"},
+    {"id": "balcony",         "cn": "阳台",     "en": "balcony"},
+    {"id": "walkin_closet",   "cn": "衣帽间",   "en": "walk-in closet"}
+  ],
+  "viewpoints": [
+    {"id": "wide_corner",       "cn": "全景·对角线",   "en": "wide-angle corner view showing the entire room layout"},
+    {"id": "eye_level_medium",  "cn": "中景·平视",     "en": "eye-level medium shot focused on a furniture cluster"},
+    {"id": "detail_material",   "cn": "特写·材质",     "en": "macro close-up of wall/floor materials and textures"},
+    {"id": "detail_fixture",    "cn": "特写·五金灯具", "en": "close-up of hardware, fixtures or lighting details"},
+    {"id": "overhead",          "cn": "俯视",          "en": "bird's-eye overhead shot of the whole space"},
+    {"id": "window_framed",     "cn": "窗户框景",      "en": "shot framed through or from the window side"},
+    {"id": "doorway_perspective", "cn": "入口透视",      "en": "one-point perspective shot from the doorway looking in"}
+  ],
+  "camera_moves_4s": [
+    {"id": "slow_push_in",    "en": "[0s-4s]: smooth slow push-in (dolly forward) revealing the room, ending on a refined composition"},
+    {"id": "slow_pull_out",   "en": "[0s-4s]: slow pull-out from a detail to reveal the full space, gentle and cinematic"},
+    {"id": "pan_left_to_right","en": "[0s-4s]: smooth horizontal pan from left to right across the room at eye level"},
+    {"id": "orbital_arc",     "en": "[0s-4s]: slow orbital arc around the focal furniture piece, parallax depth"},
+    {"id": "tilt_up",         "en": "[0s-4s]: slow tilt-up from floor materials to ceiling and lighting design"},
+    {"id": "static_shift_focus","en": "[0s-4s]: static locked-off frame with a slow rack focus shift between foreground and background"}
+  ],
+  "shot_planning_prompt": "You are a senior interior design videographer and AI prompt engineer.\n\nTASK: Plan exactly {num_shots} distinct shots that recreate the SAME interior design style in DIFFERENT rooms and viewpoints, for use as 4-second stock footage clips.\n\nINPUTS:\n- STYLE LOCK (every shot MUST preserve this style): {style_descriptor_en}\n- Available room types: {room_options}\n- Available viewpoints: {viewpoint_options}\n- Available 4s camera moves: {camera_options}\n\nPLANNING RULES:\n1. Pick exactly {num_shots} shots. Each shot = one (room_type, viewpoint, camera_move) combination.\n2. DIVERSITY: maximize variety across rooms and viewpoints. Do NOT repeat the same room more than twice. Cover at least 4 different room types. Cover at least 4 different viewpoints. Use at least 4 different camera moves.\n3. STYLE CONSISTENCY: every shot MUST look like it belongs to the SAME home/project — same color palette, same materials, same furniture language, same lighting mood described in the STYLE LOCK.\n4. REALISM: rooms must be physically plausible and internally consistent (real furniture scale, correct lighting, sensible layout). No floating objects, no impossible geometry.\n5. Each shot must be a COMPLETE, self-contained 4-second clip (not a continuation of another).\n\nOUTPUT FORMAT — return ONLY a JSON array of {num_shots} objects, no markdown:\n[\n  {\n    \"shot_id\": 1,\n    \"room_type\": \"living_room\",\n    \"viewpoint\": \"wide_corner\",\n    \"camera_move\": \"slow_push_in\",\n    \"image_prompt\": \"A complete English prompt describing the still image: [STYLE LOCK phrases] + this specific room + this viewpoint + composition + lighting + materials + no people. 80-150 words.\",\n    \"video_prompt\": \"A complete English prompt for the 4-second clip: start from the [camera_move template] + describe the specific motion of this scene + keep style consistent. 60-100 words.\"\n  }\n]\n\nCRITICAL: the image_prompt and video_prompt must EACH contain the STYLE LOCK key phrases (materials, palette, lighting) so the generator preserves style. Never include people unless the style explicitly calls for it (default: empty interior, no people)."
+}

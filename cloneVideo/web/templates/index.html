@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row" style="align-items: flex-start;">
+
+  <!-- 左: 上传 + 新建 -->
+  <div class="panel" style="flex: 1 1 380px;">
+    <h2>上传装修视频</h2>
+    <div id="uploadZone" class="upload-zone">
+      <div class="big">点击或拖拽视频到这里</div>
+      <div class="hint">支持 mp4 / mov / mkv / webm · 画幅自动跟随源视频</div>
+      <input id="fileInput" type="file" accept="video/*" style="display:none">
+    </div>
+    <div id="fileInfo" style="margin-top:14px; display:none;" class="kv">
+      <div class="k">文件</div><div id="fName">-</div>
+      <div class="k">大小</div><div id="fSize">-</div>
+      <div class="k">路径</div><div id="fPath" class="muted">-</div>
+    </div>
+    <div style="margin-top:14px;">
+      <button id="startBtn" disabled>开始复刻（镜头数按时长推导 × 4s 素材）</button>
+    </div>
+    <div id="jobStatus" style="margin-top:12px; display:none;">
+      <div class="muted" style="font-size:13px;" id="jobText">准备中...</div>
+      <div class="progress-bar"><div id="jobBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- 右: 统计 -->
+  <div class="panel" style="flex: 0 0 240px;">
+    <h2>统计</h2>
+    <div class="kv">
+      <div class="k">总项目</div><div>{{ stats.total }}</div>
+    </div>
+    <div style="margin-top:10px;" id="statusBreakdown">
+      {% for k, v in stats.by_status.items() %}
+        <span class="tag {{ 'green' if k=='done' else 'red' if k=='failed' else 'yellow' }}">{{ k }}: {{ v }}</span>
+      {% endfor %}
+      {% if not stats.by_status %}<span class="muted">暂无</span>{% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- 项目列表 -->
+<div class="panel">
+  <h2>复刻项目</h2>
+  {% if projects %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>状态</th><th>风格</th><th>画幅</th><th>镜头</th><th>素材</th><th>创建时间</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      <tr>
+        <td><a href="/project/{{ p.project_id }}"><code>{{ p.project_id }}</code></a></td>
+        <td>
+          {% set st = p.status %}
+          <span class="tag {{ 'green' if st=='done' else 'red' if st=='failed' else 'yellow' }}">{{ st }}</span>
+        </td>
+        <td>{{ (p.style_profile or {}).get('overall_style_cn', '-') }}</td>
+        <td>{{ p.aspect_ratio or '-' }}</td>
+        <td>{{ (p.shot_plan or []) | length }}</td>
+        <td>
+          {% set shots = p.shot_plan or [] %}
+          {% set done = shots | selectattr('clip_status', 'equalto', 'done') | list %}
+          {{ done | length }}/{{ shots | length }}
+        </td>
+        <td class="muted">{{ p.created_at[:19] }}</td>
+        <td>
+          {% if st != 'done' and shots %}
+          <button class="ghost" onclick="resumeProject('{{ p.project_id }}')">恢复</button>
+          {% endif %}
+          <button class="ghost" onclick="deleteProject('{{ p.project_id }}')" style="margin-left:6px;">删</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="muted">暂无项目，上传一个装修视频开始吧。</div>
+  {% endif %}
+</div>
+
+{% endblock %}

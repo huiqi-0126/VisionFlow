@@ -1,0 +1,19 @@
+# 敏感配置
+.env
+
+# 运行产物
+output/
+logs/
+data/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp

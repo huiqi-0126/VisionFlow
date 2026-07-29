@@ -1,0 +1,10 @@
+python-dotenv>=1.0.0
+requests>=2.31.0
+tos>=2.7.0
+click>=8.1.0
+rich>=13.0.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
+Pillow>=10.0.0

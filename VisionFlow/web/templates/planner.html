@@ -28,45 +28,15 @@
         <h2 class="text-xl font-bold text-white">创建 30 天内容规划</h2>
       </div>
 
-    <div class="mb-4">
-      <span class="text-xs text-gray-500 mr-2">推荐预设：</span>
-      <div class="inline-flex flex-wrap gap-2">
-        <button onclick="fillPreset('continuity_hands')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：手部演示</button>
-        <button onclick="fillPreset('continuity_studio')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：固定工作台</button>
-        <button onclick="fillPreset('continuity_host')" class="px-3 py-1 bg-cyan-900/30 hover:bg-cyan-700 border border-cyan-800 hover:border-cyan-500 rounded-full text-xs text-cyan-300 hover:text-white transition-colors">连续性优先：固定出镜者</button>
-        <button onclick="fillPreset('continuity_kitchen')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：厨房记录者</button>
-        <button onclick="fillPreset('continuity_home')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：居家生活记录者</button>
-        <button onclick="fillPreset('continuity_neighborhood')" class="px-3 py-1 bg-sky-900/30 hover:bg-sky-700 border border-sky-800 hover:border-sky-500 rounded-full text-xs text-sky-300 hover:text-white transition-colors">连续性优先：街区慢生活记录者</button>
-        <button onclick="fillPreset('continuity_bookshop')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：书店探访者</button>
-        <button onclick="fillPreset('continuity_market')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：旧物市集记录者</button>
-        <button onclick="fillPreset('continuity_sketch')" class="px-3 py-1 bg-violet-900/30 hover:bg-violet-700 border border-violet-800 hover:border-violet-500 rounded-full text-xs text-violet-300 hover:text-white transition-colors">连续性优先：城市速写者</button>
-        <button onclick="fillPreset('continuity_city_life')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">城市生活观察者</button>
-        <button onclick="fillPreset('continuity_pet_life')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">宠物日常记录者</button>
-        <button onclick="fillPreset('continuity_weekend_trip')" class="px-3 py-1 bg-amber-900/30 hover:bg-amber-700 border border-amber-800 hover:border-amber-500 rounded-full text-xs text-amber-300 hover:text-white transition-colors">周末轻旅行记录者</button>
-        <button onclick="fillPreset('indoor')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">室内装修设计师</button>
-        <button onclick="fillPreset('outdoor')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">室外庭院规划师</button>
-        <button onclick="fillPreset('cabinet')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">橱柜品牌专家</button>
-        <button onclick="fillPreset('furniture')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">高端家具顾问</button>
-        <button onclick="fillPreset('gardening')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">庭院园艺达人</button>
-        <button onclick="fillPreset('smart_home')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">智能家居体验官</button>
-        <button onclick="fillPreset('lighting')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">全屋灯光设计师</button>
-        <button onclick="fillPreset('cleaning')" class="px-3 py-1 bg-gray-800 hover:bg-brand-600 border border-gray-700 hover:border-brand-500 rounded-full text-xs text-gray-300 hover:text-white transition-colors">高端家政收纳师</button>
-      <span class="text-[10px] text-gray-600 self-center ml-2">生活类(低AI味)</span>
-      <button onclick="fillPreset('foodie')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">美食家常 (reddit)</button>
-      <button onclick="fillPreset('pet')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">救助犬日常 (reddit)</button>
-      <button onclick="fillPreset('parenting')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">带娃日常 (Twitter)</button>
-      <button onclick="fillPreset('entertainment')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">流行文化爱好者 (Twitter)</button>
-      <button onclick="fillPreset('stray_rescue')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">流浪动物救助 (reddit)</button>
-      <button onclick="fillPreset('pet_lover')" class="px-3 py-1 bg-green-900/30 hover:bg-green-700 border border-green-800 hover:border-green-500 rounded-full text-xs text-green-300 hover:text-white transition-colors">宠物爱好者 (reddit)</button>
-      <span class="text-[10px] text-gray-600 self-center ml-2">发帖求助(纯文字)</span>
-      <button onclick="fillPreset('post_deleted_help')" class="px-3 py-1 bg-yellow-900/30 hover:bg-yellow-700 border border-yellow-800 hover:border-yellow-500 rounded-full text-xs text-yellow-300 hover:text-white transition-colors">家装宠物发帖被删求助 (reddit)</button>
-      <span class="text-[10px] text-gray-600 self-center ml-2">AI创作(公开AI身份)</span>
-      <button onclick="fillPreset('ai_concept')" class="px-3 py-1 bg-indigo-900/30 hover:bg-indigo-700 border border-indigo-800 hover:border-indigo-500 rounded-full text-xs text-indigo-300 hover:text-white transition-colors">AI概念艺术 (reddit)</button>
-      <button onclick="fillPreset('ai_character')" class="px-3 py-1 bg-indigo-900/30 hover:bg-indigo-700 border border-indigo-800 hover:border-indigo-500 rounded-full text-xs text-indigo-300 hover:text-white transition-colors">AI角色创作 (reddit)</button>
-      <button onclick="fillPreset('ai_realism')" class="px-3 py-1 bg-indigo-900/30 hover:bg-indigo-700 border border-indigo-800 hover:border-indigo-500 rounded-full text-xs text-indigo-300 hover:text-white transition-colors">AI写实摄影 (Twitter)</button>
-      </div>
-    </div>
 
+
+    <div class="mb-4" id="recommended-presets-section">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="text-xs text-gray-500">推荐预设：</span>
+        <button type="button" onclick="restoreRecommendedPresets()" class="text-[11px] text-gray-500 hover:text-cyan-300 transition-colors">恢复已删除预设</button>
+      </div>
+      <div id="recommended-presets" class="inline-flex flex-wrap gap-2"></div>
+    </div>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
 
       <div>
@@ -612,6 +582,39 @@ const presetPersonas = {
   }
 };
 
+const recommendedPresetItems = [
+  ['continuity_hands','连续性优先：手部演示','cyan'], ['continuity_studio','连续性优先：固定工作台','cyan'], ['continuity_host','连续性优先：固定出镜者','cyan'],
+  ['continuity_kitchen','连续性优先：厨房记录者','sky'], ['continuity_home','连续性优先：居家生活记录者','sky'], ['continuity_neighborhood','连续性优先：街区慢生活记录者','sky'],
+  ['continuity_bookshop','连续性优先：书店探访者','violet'], ['continuity_market','连续性优先：旧物市集记录者','violet'], ['continuity_sketch','连续性优先：城市速写者','violet'],
+  ['continuity_city_life','城市生活观察者','amber'], ['continuity_pet_life','宠物日常记录者','amber'], ['continuity_weekend_trip','周末轻旅行记录者','amber'],
+  ['indoor','室内装修设计师','gray'], ['outdoor','室外庭院规划师','gray'], ['cabinet','橱柜品牌专家','gray'], ['furniture','高端家具顾问','gray'], ['gardening','庭院园艺达人','gray'], ['smart_home','智能家居体验官','gray'], ['lighting','全屋灯光设计师','gray'], ['cleaning','高端家政收纳师','gray'],
+  ['foodie','美食家常 (reddit)','green'], ['pet','救助犬日常 (reddit)','green'], ['parenting','带娃日常 (Twitter)','green'], ['entertainment','流行文化爱好者 (Twitter)','green'], ['stray_rescue','流浪动物救助 (reddit)','green'], ['pet_lover','宠物爱好者 (reddit)','green'],
+  ['post_deleted_help','家装宠物发帖被删求助 (reddit)','yellow'], ['ai_concept','AI概念艺术 (reddit)','indigo'], ['ai_character','AI角色创作 (reddit)','indigo'], ['ai_realism','AI写实摄影 (Twitter)','indigo']
+];
+
+function hiddenRecommendedPresets() {
+  try { return new Set(JSON.parse(localStorage.getItem('visionflow.hiddenRecommendedPresets') || '[]')); }
+  catch (_) { return new Set(); }
+}
+function renderRecommendedPresets() {
+  const target = document.getElementById('recommended-presets');
+  if (!target) return;
+  const hidden = hiddenRecommendedPresets();
+  target.innerHTML = '';
+  recommendedPresetItems.filter(([key]) => !hidden.has(key)).forEach(([key, label, color]) => {
+    const chip = document.createElement('span');
+    chip.className = `inline-flex items-center overflow-hidden rounded-full border border-${color}-800 bg-${color}-900/30 text-xs text-${color}-300`;
+    const choose = document.createElement('button');
+    choose.type = 'button'; choose.className = `px-3 py-1 hover:bg-${color}-700 hover:text-white transition-colors`; choose.textContent = label;
+    choose.onclick = () => fillPreset(key);
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = `px-2 py-1 border-l border-${color}-800 hover:bg-red-900/60 hover:text-red-200 transition-colors`;
+    remove.title = `删除预设：${label}`; remove.setAttribute('aria-label', remove.title); remove.textContent = '×';
+    remove.onclick = () => { hidden.add(key); localStorage.setItem('visionflow.hiddenRecommendedPresets', JSON.stringify([...hidden])); renderRecommendedPresets(); };
+    chip.append(choose, remove); target.appendChild(chip);
+  });
+}
+function restoreRecommendedPresets() { localStorage.removeItem('visionflow.hiddenRecommendedPresets'); renderRecommendedPresets(); }
 function fillPreset(type) {
   const data = presetPersonas[type];
   if (!data) return;
@@ -711,5 +714,8 @@ function deletePlan(planId) {
     alert('请求错误: ' + e);
   });
 }
+document.addEventListener('DOMContentLoaded', renderRecommendedPresets);
 </script>
 {% endblock %}
+
+
