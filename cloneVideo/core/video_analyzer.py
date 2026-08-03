@@ -23,6 +23,7 @@ class KeyFrame:
     path: str                 # 图片路径
     index: int                # 序号
     description: str = ""     # LLM 生成的画面描述
+    clean_path: str = ""      # 去人/字后的干净基底图路径(风格改造用)
 
 
 def aspect_ratio_from_resolution(width: int, height: int) -> str:
@@ -123,16 +124,20 @@ class VideoAnalyzer:
         self,
         video_path: str | Path,
         output_dir: str | Path,
+        interval: float | None = None,
     ) -> list[KeyFrame]:
-        """从视频中按固定间隔提取关键帧
+        """从视频中按间隔提取关键帧(支持小数秒, 用于按目标帧数均匀覆盖整段视频)
 
         使用 ffmpeg: ffmpeg -i input.mp4 -vf fps=1/N -q:v 2 output/frame_%04d.jpg
+        interval 不传时用构造时的 keyframe_interval。
         """
         video_path = Path(video_path)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        fps_filter = f"fps=1/{self.keyframe_interval}"
+        iv = float(interval) if interval else float(self.keyframe_interval)
+        iv = max(iv, 0.1)  # 防止过小/除零
+        fps_filter = f"fps={1.0 / iv:.4f}"
         output_pattern = str(output_dir / "frame_%04d.jpg")
 
         cmd = [
@@ -143,7 +148,7 @@ class VideoAnalyzer:
             output_pattern,
         ]
 
-        logger.info("提取关键帧: %s (间隔 %ds)", video_path.name, self.keyframe_interval)
+        logger.info("提取关键帧: %s (间隔 %.2fs)", video_path.name, iv)
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             if result.returncode != 0:
@@ -161,7 +166,7 @@ class VideoAnalyzer:
                 idx = int(img_file.stem.split("_")[1])
             except (IndexError, ValueError):
                 idx = len(frames) + 1
-            timestamp = (idx - 1) * self.keyframe_interval
+            timestamp = round((idx - 1) * iv, 3)
             frames.append(KeyFrame(
                 timestamp=timestamp,
                 path=str(img_file),

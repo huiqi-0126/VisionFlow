@@ -1,0 +1,11 @@
+interface:
+  display_name: "Reference IP Reel Pipeline"
+  short_description: "Reference-to-reel workflow with consistent Higgsfield IP"
+  default_prompt: "Use $reference-ip-reel-pipeline to turn my reference video, Higgsfield character IP, and script into a finished captioned reel."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "higgsfield"
+      description: "Higgsfield image, Soul character, image-to-video, audio, and cloud media tools"
+      transport: "streamable_http"
+      url: "https://mcp.higgsfield.ai/mcp"

@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,76 +13,298 @@
       --border: #2a313d;
       --text: #e6e9ef;
       --muted: #8a93a3;
-      --accent: #d4a574;     /* 暖木色, 贴合装修调性 */
+      --accent: #d4a574;
+      /* 暖木色, 贴合装修调性 */
       --accent-2: #6ea8c4;
       --green: #5fb878;
       --red: #e06c75;
       --yellow: #e5c07b;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      margin: 0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.5;
+      margin: 0;
+      font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
     }
-    a { color: var(--accent-2); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+
+    a {
+      color: var(--accent-2);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
     header.nav {
-      display: flex; align-items: center; gap: 16px;
-      padding: 14px 28px; border-bottom: 1px solid var(--border);
-      background: var(--panel); position: sticky; top: 0; z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
-    header.nav .brand { font-weight: 700; font-size: 17px; color: var(--accent); letter-spacing: .5px; }
-    header.nav .brand small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
-    header.nav nav a { color: var(--text); margin-right: 18px; font-size: 14px; }
-    main { max-width: 1280px; margin: 0 auto; padding: 28px; }
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-    .panel h2 { margin: 0 0 14px; font-size: 16px; color: var(--text); }
-    .muted { color: var(--muted); }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; }
-    .grid { display: grid; gap: 16px; }
-    button, .btn {
-      background: var(--accent); color: #1a1208; border: 0; border-radius: 7px;
-      padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+
+    header.nav .brand {
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--accent);
+      letter-spacing: .5px;
     }
-    button.ghost, .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
-    tr:hover td { background: var(--panel-2); }
+
+    header.nav .brand small {
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 8px;
+      font-size: 12px;
+    }
+
+    header.nav nav a {
+      color: var(--text);
+      margin-right: 18px;
+      font-size: 14px;
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 16px;
+      color: var(--text);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    button,
+    .btn {
+      background: var(--accent);
+      color: #1a1208;
+      border: 0;
+      border-radius: 7px;
+      padding: 9px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.ghost,
+    .btn.ghost {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    tr:hover td {
+      background: var(--panel-2);
+    }
+
     .tag {
-      display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 12px;
-      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 12px;
+      font-size: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
     }
-    .tag.green { color: var(--green); border-color: rgba(95,184,120,.3); }
-    .tag.yellow { color: var(--yellow); border-color: rgba(229,192,123,.3); }
-    .tag.red { color: var(--red); border-color: rgba(224,108,117,.3); }
-    .tag.blue { color: var(--accent-2); border-color: rgba(110,168,196,.3); }
+
+    .tag.green {
+      color: var(--green);
+      border-color: rgba(95, 184, 120, .3);
+    }
+
+    .tag.yellow {
+      color: var(--yellow);
+      border-color: rgba(229, 192, 123, .3);
+    }
+
+    .tag.red {
+      color: var(--red);
+      border-color: rgba(224, 108, 117, .3);
+    }
+
+    .tag.blue {
+      color: var(--accent-2);
+      border-color: rgba(110, 168, 196, .3);
+    }
+
     .upload-zone {
-      border: 2px dashed var(--border); border-radius: 10px; padding: 36px;
-      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 36px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
     }
-    .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--panel-2); }
-    .upload-zone .big { font-size: 15px; color: var(--text); }
-    .upload-zone .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
-    .swatch { display: inline-block; width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--border); vertical-align: middle; margin-right: 4px; }
-    .shot-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
-    .shot-card img, .shot-card video { width: 100%; display: block; background: #000; }
-    .shot-card .meta { padding: 10px 12px; font-size: 12px; }
-    .shot-card .meta .t { color: var(--text); font-weight: 600; margin-bottom: 4px; }
-    .progress-bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
-    .progress-bar > div { height: 100%; background: var(--accent); transition: width .3s; }
-    .kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
-    .kv .k { color: var(--muted); }
+
+    .upload-zone:hover,
+    .upload-zone.drag {
+      border-color: var(--accent);
+      background: var(--panel-2);
+    }
+
+    .upload-zone .big {
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    .upload-zone .hint {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    .shot-card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      overflow: hidden;
+    }
+
+    .shot-card img,
+    .shot-card video {
+      width: 100%;
+      display: block;
+      background: #000;
+    }
+
+    #qcResult video {
+      max-height: 1080px;
+      max-width: 100%;
+      display: block;
+      margin: 0 auto;
+      border-radius: 8px;
+    }
+
+    .shot-card .meta {
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+
+    .shot-card .meta .t {
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--panel-2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar>div {
+      height: 100%;
+      background: var(--accent);
+      transition: width .3s;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 6px 12px;
+      font-size: 13px;
+    }
+
+    .kv .k {
+      color: var(--muted);
+    }
+
     .toast {
-      position: fixed; bottom: 24px; right: 24px; background: var(--panel-2);
-      border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.4); max-width: 360px; z-index: 100;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+      max-width: 360px;
+      z-index: 100;
     }
-    .toast.err { border-color: var(--red); }
-    .toast.ok { border-color: var(--green); }
+
+    .toast.err {
+      border-color: var(--red);
+    }
+
+    .toast.ok {
+      border-color: var(--green);
+    }
   </style>
 </head>
+
 <body>
   <header class="nav">
     <div class="brand">cloneVideo <small>室内装修视频复刻 · 同风格不同房间素材</small></div>
@@ -95,4 +318,5 @@
   <script src="/static/app.js"></script>
   {% block scripts %}{% endblock %}
 </body>
+
 </html>

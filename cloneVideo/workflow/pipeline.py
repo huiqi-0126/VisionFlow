@@ -1,16 +1,18 @@
-"""室内装修视频复刻流水线 - 核心编排器
+"""室内装修视频复刻流水线 - 核心编排器（真实帧风格统一改造）
 
-流程:
-  上传视频 → 提取关键帧 → 分析画面 → 检测源视频画幅
-  → 风格画像 + 挑参考帧 → 按时长智能推导镜头清单
-  → 逐 shot 生成风格图(参考帧锚定) → 逐 shot 生成 4s 视频(单图驱动)
+新流程（收敛、真实）:
+  上传视频 → 按时长推导镜头数 N(8~15) → 均匀抽 N 帧
+  → LLM 分析帧画面 → 检测源视频画幅
+  → AI 推荐统一目标风格 → 清理帧(去人/字, 保留布局家具)
+  → 逐帧 image-edit(保持布局家具, 只改风格) → 统一风格图
+  → 逐图生成 4s 视频(单图驱动+运镜)
   → 输出独立素材(images[] + clips[])
 
-与 VisionFlow 的差异:
-  - 输出是【独立素材包】而非合并成片(不做 ffmpeg merge)
-  - 画幅跟随源视频(横屏/竖屏自适应)
-  - 风格一致性靠【风格锁 prompt + 参考帧 pic】双重锁定
-  - 镜头数按视频时长智能推导(4~15个), 每个素材 4 秒
+与旧版的差异:
+  - 基底是【真实视频截图】(去人/字), 不是 LLM 想象的房间 → 收敛、真实
+  - 生成是【风格改造】(image-edit, 保持布局家具), 不是 text-to-image 凭空生成 → 不发散
+  - 所有图统一成 AI 推荐的同一个目标风格 → 风格一致
+  - 画幅跟随源视频; 镜头数按时长推导(8~15)
 """
 
 from __future__ import annotations
@@ -24,19 +26,35 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 
 from config import Settings, get_settings
 from core.cos_client import COSClient
+from core.frame_cleaner import FrameCleaner
 from core.llm_client import LLMClient
 from core.media_api import MediaAPIClient
 from core.project_manager import ProjectManager
 from core.shot_planner import ShotPlanner, calc_num_shots
 from core.style_analyzer import StyleAnalyzer
-from core.video_analyzer import VideoAnalyzer, aspect_ratio_from_resolution
+from core.video_analyzer import VideoAnalyzer, KeyFrame, aspect_ratio_from_resolution
 
 logger = logging.getLogger(__name__)
 console = Console()
 
 
+def _cap_frames(frames: list[KeyFrame], n: int) -> list[KeyFrame]:
+    """均匀截取最多 n 帧（保留首尾，覆盖全视频）"""
+    if len(frames) <= n or n < 2:
+        return frames
+    step = (len(frames) - 1) / (n - 1)
+    out: list[KeyFrame] = []
+    seen = set()
+    for i in range(n):
+        idx = round(i * step)
+        if idx not in seen and 0 <= idx < len(frames):
+            seen.add(idx)
+            out.append(frames[idx])
+    return out or frames[:n]
+
+
 class CloneVideoPipeline:
-    """室内装修视频复刻全流程编排器"""
+    """室内装修视频复刻全流程编排器（真实帧风格统一改造）"""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
@@ -63,7 +81,12 @@ class CloneVideoPipeline:
         self.project_mgr = ProjectManager(s.data_dir, s.projects_dir)
         self.video_analyzer = VideoAnalyzer(self.llm, s.keyframe_interval, s.ffmpeg_path)
         self.style_analyzer = StyleAnalyzer(self.llm)
-        # shot_planner 在 run() 中按配置创建
+        self.frame_cleaner = FrameCleaner(
+            self.media_api, self.cos,
+            image_model=s.default_image_model,
+            size=s.default_size,
+        )
+        self.shot_planner = ShotPlanner(clip_duration=s.clip_duration)
 
     def run(
         self,
@@ -74,7 +97,7 @@ class CloneVideoPipeline:
 
         Args:
             video_path: 源视频路径 (新建项目时必填)
-            resume_project_id: 已有项目 ID, 提供则跳过前 4 步, 直接从生成素材开始
+            resume_project_id: 已有项目 ID, 提供则跳过前 6 步, 直接从生成素材开始
         """
         if resume_project_id:
             project = self.project_mgr.get_project(resume_project_id)
@@ -83,50 +106,50 @@ class CloneVideoPipeline:
             pid = resume_project_id
             output_dir = Path(project["output_dir"])
             console.print(f"\n[bold cyan]>> 恢复室内复刻项目:[/] [yellow]{pid}[/]")
-        else:
-            if not video_path:
-                raise ValueError("新建项目必须提供源视频路径")
-            video_path = Path(video_path)
-            if not video_path.exists():
-                raise FileNotFoundError(f"视频文件不存在: {video_path}")
+            aspect_ratio = project.get("aspect_ratio") or self.settings.default_aspect_ratio
+            self._phase_generate_images(pid, output_dir, aspect_ratio)
+            project = self._phase_generate_clips(pid, output_dir, aspect_ratio)
+            self.project_mgr.update_project(pid, status="done")
+            return self.project_mgr.get_project(pid) or project
 
-            # 先检测源视频画幅（让生成尺寸跟随源视频）
-            console.print(f"\n[bold cyan]>> 室内装修视频复刻:[/] [yellow]{video_path.name}[/]")
-            width, height = self.video_analyzer.get_video_resolution(video_path)
-            aspect_ratio = aspect_ratio_from_resolution(width, height)
-            console.print(f"  源视频画幅: {width}x{height} → aspect_ratio={aspect_ratio}")
+        # ── 新建 ──
+        if not video_path:
+            raise ValueError("新建项目必须提供源视频路径")
+        video_path = Path(video_path)
+        if not video_path.exists():
+            raise FileNotFoundError(f"视频文件不存在: {video_path}")
 
-            project = self.project_mgr.create_project(
-                source_video=str(video_path),
-                source_resolution=(width, height),
-                aspect_ratio=aspect_ratio,
-            )
-            pid = project["project_id"]
-            output_dir = Path(project["output_dir"])
+        console.print(f"\n[bold cyan]>> 室内装修视频复刻:[/] [yellow]{video_path.name}[/]")
+        width, height = self.video_analyzer.get_video_resolution(video_path)
+        aspect_ratio = aspect_ratio_from_resolution(width, height)
+        duration = self.video_analyzer.get_video_duration(video_path)
+        num_shots = calc_num_shots(duration, self.settings.min_shots, self.settings.max_shots)
+        console.print(
+            f"  源视频: {width}x{height} → {aspect_ratio} | 时长 {duration:.1f}s "
+            f"→ 镜头数 {num_shots} (范围 {self.settings.min_shots}~{self.settings.max_shots})"
+        )
 
-        aspect_ratio = project.get("aspect_ratio") or self.settings.default_aspect_ratio
+        project = self.project_mgr.create_project(
+            source_video=str(video_path),
+            source_resolution=(width, height),
+            aspect_ratio=aspect_ratio,
+        )
+        pid = project["project_id"]
+        output_dir = Path(project["output_dir"])
 
         try:
-            if not resume_project_id:
-                # 此分支逻辑保证 video_path 非 None（resume 路径已在上文处理并跳过本块）
-                if not video_path:
-                    raise ValueError("缺少源视频路径")
-                src_video = Path(video_path)
-                project = self._phase_analyze(src_video, pid, output_dir, project)
-                project = self._phase_style_and_plan(src_video, pid, output_dir, project, aspect_ratio)
-
-            # Step 6/7: 生成图片素材
-            project = self._phase_generate_images(pid, output_dir, aspect_ratio)
-
-            # Step 7/7: 生成视频素材
+            self._phase_extract_and_analyze(video_path, pid, output_dir, duration, num_shots)
+            self._phase_style(pid, output_dir)
+            self._phase_clean(pid, output_dir)
+            self._phase_plan(pid)
+            self._phase_generate_images(pid, output_dir, aspect_ratio)
             project = self._phase_generate_clips(pid, output_dir, aspect_ratio)
 
             self.project_mgr.update_project(pid, status="done")
             project = self.project_mgr.get_project(pid) or {}
-            images = project.get("images", [])
-            clips = project.get("clips", [])
             console.print(
-                f"\n  [bold green]v 复刻完成![/] {len(images)} 张风格图 + {len(clips)} 个 4s 素材"
+                f"\n  [bold green]v 复刻完成![/] "
+                f"{len(project.get('images', []))} 张统一风格图 + {len(project.get('clips', []))} 个 4s 素材"
             )
             return project
 
@@ -137,145 +160,126 @@ class CloneVideoPipeline:
             raise
 
     # ════════════════════════════════════════════════════════════════
-    # 阶段一: 抽帧 + 画面分析
+    # Step 1-2: 抽帧 + 画面分析
     # ════════════════════════════════════════════════════════════════
 
-    def _phase_analyze(
+    def _phase_extract_and_analyze(
         self,
         video_path: Path,
         pid: str,
         output_dir: Path,
-        project: dict[str, Any],
-    ) -> dict[str, Any]:
-        # Step 1: 提取关键帧
-        console.print("  [dim]Step 1/7: 提取关键帧...[/]")
+        duration: float,
+        num_shots: int,
+    ) -> None:
+        # Step 1: 均匀抽 N 帧（interval = duration / N, 可为小数秒）
+        interval = duration / num_shots if num_shots > 0 else self.settings.keyframe_interval
+        console.print(f"  [dim]Step 1/7: 均匀抽帧 (目标 {num_shots} 帧, 间隔 {interval:.2f}s)...[/]")
         frames_dir = output_dir / "frames"
-        frames = self.video_analyzer.extract_keyframes(video_path, frames_dir)
+        frames = self.video_analyzer.extract_keyframes(video_path, frames_dir, interval=interval)
         if not frames:
             raise RuntimeError("未提取到任何关键帧")
+        # 截取到目标帧数（均匀覆盖）
+        frames = _cap_frames(frames, num_shots)
+        console.print(f"  [green]v {len(frames)} 帧 (时长 {duration:.1f}s)[/]")
 
-        duration = self.video_analyzer.get_video_duration(video_path)
+        # Step 2: 分析帧画面（用于清理判断 + 风格决策 + 视频场景）
+        console.print("  [dim]Step 2/7: 分析帧画面...[/]")
+        self.video_analyzer.analyze_all_frames(frames)
+
         self.project_mgr.update_project(
             pid,
             status="analyzing",
             video_duration=duration,
             keyframes=[
-                {"timestamp": f.timestamp, "path": f.path, "index": f.index, "description": f.description}
-                for f in frames
-            ],
-        )
-        console.print(f"  [green]v {len(frames)} 个关键帧 (时长 {duration:.1f}s)[/]")
-
-        # Step 2: 分析关键帧画面
-        console.print("  [dim]Step 2/7: 分析关键帧画面...[/]")
-        self.video_analyzer.analyze_all_frames(frames)
-        self.project_mgr.update_project(
-            pid,
-            keyframes=[
-                {"timestamp": f.timestamp, "path": f.path, "index": f.index, "description": f.description}
+                {"timestamp": f.timestamp, "path": f.path, "index": f.index,
+                 "description": f.description, "clean_path": f.clean_path}
                 for f in frames
             ],
         )
         console.print("  [green]v 画面分析完成[/]")
-        return self.project_mgr.get_project(pid) or project
 
     # ════════════════════════════════════════════════════════════════
-    # 阶段二: 风格画像 + 参考帧 + 镜头规划
+    # Step 3-4: 画幅 + AI 推荐统一目标风格
     # ════════════════════════════════════════════════════════════════
 
-    def _phase_style_and_plan(
-        self,
-        video_path: Path,
-        pid: str,
-        output_dir: Path,
-        project: dict[str, Any],
-        aspect_ratio: str,
-    ) -> dict[str, Any]:
-        # Step 3: 画幅已在 run() 检测, 这里只打印确认
-        console.print(f"  [dim]Step 3/7: 画幅跟随源视频 = {aspect_ratio}[/]")
+    def _phase_style(self, pid: str, output_dir: Path) -> None:
+        console.print("  [dim]Step 3/7: 画幅跟随源视频[/]")
+        project = self.project_mgr.get_project(pid) or {}
+        frames = self._load_keyframes(project)
 
-        # Step 4: 风格画像 + 挑参考帧
-        console.print("  [dim]Step 4/7: 提取风格画像 + 挑选参考帧...[/]")
-        from core.video_analyzer import KeyFrame
-        keyframe_dicts = project.get("keyframes", [])
-        frames = [
-            KeyFrame(
-                timestamp=kf.get("timestamp", 0.0),
-                path=kf.get("path", ""),
-                index=kf.get("index", i + 1),
-                description=kf.get("description", ""),
-            )
-            for i, kf in enumerate(keyframe_dicts)
-        ]
-        profile, ref_frames = self.style_analyzer.analyze(frames)
+        console.print("  [dim]Step 4/7: AI 推荐统一目标风格...[/]")
+        self.project_mgr.update_project(pid, status="style_profiled")
+        profile = self.style_analyzer.decide(frames)
+        self.project_mgr.update_project(pid, style_profile=profile.to_dict())
+        console.print(
+            f"  [green]v 原风格 {profile.original_style_cn} → 目标风格 "
+            f"{profile.overall_style_cn} / {profile.overall_style_en}[/]"
+        )
+        console.print(f"  [dim]目标风格锁:[/] {profile.style_descriptor_en[:160]}...")
 
-        # 复制参考帧到项目目录(便于追溯), 记录本地路径
-        import shutil
-        ref_local_paths: list[str] = []
-        ref_dir = output_dir / "reference"
-        ref_dir.mkdir(parents=True, exist_ok=True)
-        for i, rf in enumerate(ref_frames, 1):
-            if rf.path and Path(rf.path).exists():
-                dst = ref_dir / f"reference_{i:02d}.jpg"
-                shutil.copy2(rf.path, dst)
-                ref_local_paths.append(str(dst))
+    # ════════════════════════════════════════════════════════════════
+    # Step 5: 清理基底帧（去人/字）
+    # ════════════════════════════════════════════════════════════════
 
+    def _phase_clean(self, pid: str, output_dir: Path) -> None:
+        console.print("  [dim]Step 5/7: 清理基底帧 (去人/去字, 保留布局家具)...[/]")
+        self.project_mgr.update_project(pid, status="cleaning")
+        project = self.project_mgr.get_project(pid) or {}
+        frames = self._load_keyframes(project)
+
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+            BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(), console=console,
+        ) as progress:
+            task = progress.add_task("清理帧", total=len(frames))
+            clean_dir = Path(output_dir) / "clean_frames"
+            clean_dir.mkdir(parents=True, exist_ok=True)
+            for frame in frames:
+                progress.update(task, description=f"清理帧 {frame.index}/{len(frames)}")
+                # 判断是否需 AI 清理（有人/有文字才调 API，干净帧直接用原帧）
+                if self.frame_cleaner._needs_clean(frame.description or ""):
+                    frame.clean_path = self.frame_cleaner._clean_one(frame, clean_dir)
+                else:
+                    frame.clean_path = frame.path
+                progress.update(task, advance=1)
+
+        # 回写 clean_path 到 keyframes
         self.project_mgr.update_project(
             pid,
-            status="style_profiled",
-            style_profile=profile.to_dict(),
-            reference_frames=ref_local_paths,
+            keyframes=[
+                {"timestamp": f.timestamp, "path": f.path, "index": f.index,
+                 "description": f.description, "clean_path": f.clean_path}
+                for f in frames
+            ],
         )
-        console.print(f"  [green]v 风格: {profile.overall_style_cn} / {profile.overall_style_en}[/]")
-        console.print(f"  [green]v 参考帧: {len(ref_local_paths)} 张[/]")
-        console.print(f"  [dim]风格锁:[/] {profile.style_descriptor_en[:160]}...")
+        cleaned = sum(1 for f in frames if f.clean_path != f.path)
+        console.print(f"  [green]v 清理完成: {cleaned}/{len(frames)} 帧做了去人/字[/]")
 
-        # Step 5: 规划镜头清单 (镜头数按源视频时长智能推导)
-        num_shots = calc_num_shots(
-            project.get("video_duration", 0),
-            min_shots=self.settings.min_shots,
-            max_shots=self.settings.max_shots,
-        )
-        console.print(
-            f"  [dim]Step 5/7: 规划 {num_shots} 个镜头 "
-            f"(按时长 {project.get('video_duration', 0):.1f}s 推导, 范围 "
-            f"{self.settings.min_shots}~{self.settings.max_shots})...[/]"
-        )
-        planner = ShotPlanner(
-            self.llm,
-            num_shots=num_shots,
-            clip_duration=self.settings.clip_duration,
-        )
-        shot_plan = planner.plan(profile)
+    # ════════════════════════════════════════════════════════════════
+    # Step 6: 构建镜头清单
+    # ════════════════════════════════════════════════════════════════
+
+    def _phase_plan(self, pid: str) -> None:
+        console.print("  [dim]Step 6/7: 构建镜头清单 (基底帧 + 运镜 + 改造prompt)...[/]")
+        project = self.project_mgr.get_project(pid) or {}
+        frames = self._load_keyframes(project)
+        profile = self._load_profile(project)
+        shot_plan = self.shot_planner.build(frames, profile)
         self.project_mgr.update_project(pid, status="planning", shot_plan=shot_plan)
         console.print(f"  [green]v {len(shot_plan)} 个镜头[/]")
-        for s in shot_plan:
-            console.print(
-                f"    [cyan]shot_{s['shot_id']:02d}[/] "
-                f"{s.get('room_type', '?')} · {s.get('viewpoint', '?')} · {s.get('camera_move', '?')}"
-            )
-        return self.project_mgr.get_project(pid) or project
 
     # ════════════════════════════════════════════════════════════════
-    # 阶段三: 生成图片素材
+    # Step 6b: 逐帧风格改造（生成统一风格图）
     # ════════════════════════════════════════════════════════════════
 
-    def _phase_generate_images(
-        self,
-        pid: str,
-        output_dir: Path,
-        aspect_ratio: str,
-    ) -> dict[str, Any]:
-        console.print("  [dim]Step 6/7: 生成风格图片素材...[/]")
+    def _phase_generate_images(self, pid: str, output_dir: Path, aspect_ratio: str) -> None:
+        console.print("  [dim]Step 7/7 (1/2): 风格改造 (保持布局家具, 统一风格)...[/]")
         self.project_mgr.update_project(pid, status="generating_images")
-
         project = self.project_mgr.get_project(pid)
         if not project:
             raise RuntimeError(f"项目丢失: {pid}")
         shot_plan = project.get("shot_plan", [])
-
-        # 上传参考帧到 TOS, 取第一张作为风格锚定 pic
-        ref_pic_url = self._upload_reference_pic(project)
 
         images_dir = output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
@@ -285,43 +289,35 @@ class CloneVideoPipeline:
             BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(), console=console,
         ) as progress:
-            task = progress.add_task("生成图片", total=len(shot_plan))
+            task = progress.add_task("风格改造", total=len(shot_plan))
             for shot in shot_plan:
                 sid = shot["shot_id"]
-                progress.update(task, description=f"图片 shot_{sid:02d}/{len(shot_plan)}")
+                progress.update(task, description=f"改造 shot_{sid:02d}/{len(shot_plan)}")
                 if shot.get("image_status") == "done" and shot.get("image_path"):
                     progress.update(task, advance=1)
                     continue
                 try:
-                    img_path = self._generate_shot_image(shot, images_dir, ref_pic_url, aspect_ratio)
+                    img_path = self._generate_shot_image(shot, images_dir, aspect_ratio)
                     shot["image_path"] = img_path
                     shot["image_status"] = "done"
                 except Exception as exc:
-                    logger.warning("shot %d 图片生成失败: %s", sid, exc)
-                    console.print(f"    [yellow]! shot_{sid:02d} 图片失败: {exc}[/]")
+                    logger.warning("shot %d 风格改造失败: %s", sid, exc)
+                    console.print(f"    [yellow]! shot_{sid:02d} 风格改造失败: {exc}[/]")
                     shot["image_status"] = "failed"
                 self.project_mgr.update_project(pid, shot_plan=shot_plan)
                 progress.update(task, advance=1)
 
-        # 汇总成功的图片路径
         images = [s["image_path"] for s in shot_plan if s.get("image_status") == "done" and s.get("image_path")]
         self.project_mgr.update_project(pid, images=images)
-        console.print(f"  [green]v {len(images)}/{len(shot_plan)} 张图片完成[/]")
-        return self.project_mgr.get_project(pid) or {}
+        console.print(f"  [green]v {len(images)}/{len(shot_plan)} 张统一风格图完成[/]")
 
     # ════════════════════════════════════════════════════════════════
-    # 阶段四: 生成 4s 视频素材
+    # Step 7b: 逐图生成 4s 视频
     # ════════════════════════════════════════════════════════════════
 
-    def _phase_generate_clips(
-        self,
-        pid: str,
-        output_dir: Path,
-        aspect_ratio: str,
-    ) -> dict[str, Any]:
-        console.print("  [dim]Step 7/7: 生成 4s 视频素材...[/]")
+    def _phase_generate_clips(self, pid: str, output_dir: Path, aspect_ratio: str) -> dict[str, Any]:
+        console.print("  [dim]Step 7/7 (2/2): 生成 4s 视频素材...[/]")
         self.project_mgr.update_project(pid, status="generating_clips")
-
         project = self.project_mgr.get_project(pid)
         if not project:
             raise RuntimeError(f"项目丢失: {pid}")
@@ -342,7 +338,6 @@ class CloneVideoPipeline:
                 if shot.get("clip_status") == "done" and shot.get("clip_path"):
                     progress.update(task, advance=1)
                     continue
-                # 图片没成功的 shot 跳过视频
                 if shot.get("image_status") != "done" or not shot.get("image_path"):
                     logger.warning("shot %d 图片缺失, 跳过视频生成", sid)
                     shot["clip_status"] = "skipped"
@@ -361,53 +356,66 @@ class CloneVideoPipeline:
 
         clips = [s["clip_path"] for s in shot_plan if s.get("clip_status") == "done" and s.get("clip_path")]
         self.project_mgr.update_project(pid, clips=clips)
-        console.print(f"  [green]v {len(clips)}/{len(shot_plan)} 个视频完成[/]")
+        console.print(f"  [green]v {len(clips)}/{len(shot_plan)} 个 4s 视频完成[/]")
         return self.project_mgr.get_project(pid) or {}
 
     # ════════════════════════════════════════════════════════════════
     # 子步骤
     # ════════════════════════════════════════════════════════════════
 
-    def _upload_reference_pic(self, project: dict[str, Any]) -> str | None:
-        """上传第一张参考帧到 TOS, 返回公网 URL 作为风格锚定 pic"""
-        ref_frames = project.get("reference_frames", [])
-        for local in ref_frames:
-            if local and Path(local).exists():
-                try:
-                    url = self.cos.upload_file(local)
-                    logger.info("参考帧上传: %s", url[:100])
-                    return url
-                except Exception as exc:
-                    logger.warning("参考帧上传失败: %s", exc)
-        logger.warning("无可用参考帧, 图片生成将不传 pic(纯文本风格锁)")
-        return None
+    def _load_keyframes(self, project: dict[str, Any]) -> list[KeyFrame]:
+        """从 project 的 keyframes 字段重建 KeyFrame 列表"""
+        frames: list[KeyFrame] = []
+        for i, kf in enumerate(project.get("keyframes", [])):
+            frames.append(KeyFrame(
+                timestamp=kf.get("timestamp", 0.0),
+                path=kf.get("path", ""),
+                index=kf.get("index", i + 1),
+                description=kf.get("description", ""),
+                clean_path=kf.get("clean_path", ""),
+            ))
+        return frames
+
+    def _load_profile(self, project: dict[str, Any]) -> Any:
+        """从 project 的 style_profile 字段重建 StyleProfile"""
+        from core.style_analyzer import StyleProfile
+        return StyleProfile.from_dict(project.get("style_profile", {}) or {})
 
     def _generate_shot_image(
         self,
         shot: dict[str, Any],
         images_dir: Path,
-        ref_pic_url: str | None,
         aspect_ratio: str,
     ) -> str:
-        """为单个 shot 生成风格图片, 返回本地路径"""
+        """风格改造：pic=干净基底帧, prompt=保持布局只改风格"""
         sid = shot["shot_id"]
         prompt = shot.get("image_prompt", "")
         if not prompt:
             raise RuntimeError(f"shot {sid} 缺少 image_prompt")
 
-        console.print(f"    [cyan]生成图片 shot_{sid:02d}[/] | ref: {'YES' if ref_pic_url else 'none'}")
-        logger.info("生成图片 shot_%02d | prompt=\n%s", sid, prompt)
+        base_local = shot.get("clean_frame_path") or shot.get("base_frame_path", "")
+        if not base_local or not Path(base_local).exists():
+            raise RuntimeError(f"shot {sid} 基底帧不存在: {base_local}")
+
+        # 上传基底帧到 TOS 作为风格改造参考图
+        try:
+            base_url = self.cos.upload_file(base_local)
+        except Exception as exc:
+            raise RuntimeError(f"shot {sid} 基底帧上传失败: {exc}") from exc
+
+        console.print(f"    [cyan]风格改造 shot_{sid:02d}[/] | 基底: {Path(base_local).name}")
+        logger.info("风格改造 shot_%02d | prompt=\n%s", sid, prompt)
 
         api_task_id = self.media_api.generate_image(
             prompt=prompt,
             model=self.settings.default_image_model,
             size=self.settings.default_size,
             aspect_ratio=aspect_ratio,
-            pic=ref_pic_url,
+            pic=base_url,
         )
         result = self.media_api.poll_image(api_task_id)
         if result.get("status") != "success" or not result.get("url"):
-            raise RuntimeError(f"图片生成失败: {result}")
+            raise RuntimeError(f"风格改造失败: {result}")
 
         img_path = images_dir / f"shot_{sid:02d}.png"
         self.media_api.download_media(result["url"], img_path)
@@ -419,10 +427,7 @@ class CloneVideoPipeline:
         clips_dir: Path,
         aspect_ratio: str,
     ) -> str:
-        """为单个 shot 生成 4s 视频, 返回本地路径
-
-        视频用该 shot 自己生成的图片(上传 TOS 后的 URL)作为单图驱动 pic。
-        """
+        """单图驱动 4s 视频：pic=风格改造图, prompt=运镜"""
         sid = shot["shot_id"]
         prompt = shot.get("video_prompt", "")
         if not prompt:
@@ -430,15 +435,14 @@ class CloneVideoPipeline:
 
         img_local = shot.get("image_path", "")
         if not img_local or not Path(img_local).exists():
-            raise RuntimeError(f"shot {sid} 图片不存在: {img_local}")
+            raise RuntimeError(f"shot {sid} 风格图不存在: {img_local}")
 
-        # 上传该 shot 的图片到 TOS 得 pic URL
         try:
             pic_url = self.cos.upload_file(img_local)
         except Exception as exc:
-            raise RuntimeError(f"shot {sid} 图片上传 TOS 失败: {exc}") from exc
+            raise RuntimeError(f"shot {sid} 风格图上传失败: {exc}") from exc
 
-        console.print(f"    [cyan]生成视频 shot_{sid:02d}[/] | pic: uploaded | dur: 4s")
+        console.print(f"    [cyan]生成视频 shot_{sid:02d}[/] | 运镜: {shot.get('camera_move', '?')} | 4s")
         logger.info("生成视频 shot_%02d | prompt=\n%s", sid, prompt)
 
         api_task_id = self.media_api.generate_video(
@@ -448,7 +452,7 @@ class CloneVideoPipeline:
             duration=str(self.settings.clip_duration),
             aspect_ratio=aspect_ratio,
             pic=pic_url,
-            video_type="0",   # 非固定时长模式(用于 4s)
+            video_type="0",
         )
         result = self.media_api.poll_video(api_task_id)
         if result.get("status") != "success" or not result.get("url"):

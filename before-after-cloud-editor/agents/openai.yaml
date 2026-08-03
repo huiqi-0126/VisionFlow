@@ -1,0 +1,15 @@
+interface:
+  display_name: "Before/After Cloud Editor"
+  short_description: "Turn six image pairs into a precise 17-second vertical edit"
+  default_prompt: "Use $before-after-cloud-editor to turn six Before/After image pairs into the locked 17-second vertical edit."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "higgsfield"
+      description: "Cloud FFmpeg rendering, media upload, and MP4 delivery"
+      transport: "streamable_http"
+      url: "https://mcp.higgsfield.ai/mcp"
+
+policy:
+  allow_implicit_invocation: true

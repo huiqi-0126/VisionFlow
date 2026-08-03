@@ -4,13 +4,16 @@
 {% set p = project %}
 {% set sp = p.style_profile or {} %}
 {% set shots = p.shot_plan or [] %}
+{% set keyframes = p.keyframes or [] %}
 
 <div class="panel">
   <div class="row" style="align-items: center; justify-content: space-between;">
     <div>
       <h2 style="margin-bottom:6px;">项目 <code>{{ p.project_id }}</code></h2>
       <div class="muted" style="font-size:13px;">
-        {{ p.source_video }} · {{ p.aspect_ratio }} · {{ p.video_duration }}s · {{ p.created_at[:19] }}
+        <span class="tag {{ 'blue' if p.mode=='image' else 'green' }}" style="margin-right:8px;">{{ '图片模式' if p.mode=='image' else '视频模式' }}</span>
+        {{ p.source_image if p.mode=='image' else p.source_video }} · {{ p.aspect_ratio }}
+        {% if p.mode != 'image' %} · {{ "%.1f"|format(p.video_duration or 0) }}s{% endif %} · {{ p.created_at[:19] }}
       </div>
     </div>
     <div>
@@ -22,14 +25,20 @@
   </div>
 </div>
 
-<!-- 风格画像 -->
+<!-- 统一目标风格决策 -->
 <div class="panel">
-  <h2>风格画像（风格锁）</h2>
+  <h2>{{ '参考图风格（锚定）' if p.mode=='image' else '统一目标风格（AI 推荐）' }}</h2>
   {% if sp %}
+  <div class="row" style="align-items: center; gap: 12px; margin-bottom: 14px;">
+    {% if p.mode != 'image' %}
+    <span class="tag blue" style="font-size:14px; padding:4px 12px;">原风格 · {{ sp.original_style_cn or '未知' }}</span>
+    <span style="color: var(--muted); font-size: 18px;">→</span>
+    {% endif %}
+    <span class="tag green" style="font-size:14px; padding:4px 12px;">{{ '锚定风格' if p.mode=='image' else '统一改造成' }} · {{ sp.overall_style_cn or '-' }} ({{ sp.overall_style_en or '' }})</span>
+  </div>
   <div class="row" style="align-items: flex-start;">
     <div style="flex: 0 0 280px;">
       <div class="kv">
-        <div class="k">整体风格</div><div>{{ sp.overall_style_cn }} / <span class="muted">{{ sp.overall_style_en }}</span></div>
         <div class="k">色板</div><div>
           {% for c in sp.color_palette %}<span class="swatch" style="background:{{ c }}" title="{{ c }}"></span>{% endfor %}
           <span class="muted" style="font-size:12px;">{{ sp.color_palette | join(', ') }}</span>
@@ -42,85 +51,86 @@
       </div>
     </div>
     <div style="flex: 1;">
-      <div class="k muted" style="font-size:12px; margin-bottom:6px;">STYLE LOCK (注入每次生成)</div>
+      <div class="k muted" style="font-size:12px; margin-bottom:6px;">目标风格锁 (注入每张图的改造 prompt)</div>
       <div style="background: var(--panel-2); border-radius:8px; padding:12px 14px; font-size:13px; color: var(--text);">
         {{ sp.style_descriptor_en }}
       </div>
     </div>
   </div>
   {% else %}
-  <div class="muted">尚未生成风格画像。</div>
+  <div class="muted">尚未生成风格决策。</div>
   {% endif %}
 </div>
-
-<!-- 参考帧 -->
-{% if p.reference_frames %}
-<div class="panel">
-  <h2>参考帧（VLM 自动挑选 · 风格锚定）</h2>
-  <div class="row">
-    {% for rf in p.reference_frames %}
-    <img src="/api/media?path={{ rf | urlencode }}" style="height:160px; border-radius:8px; border:1px solid var(--border);"">
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
 
 <!-- 镜头素材 -->
 <div class="panel">
   <div class="row" style="align-items:center; justify-content:space-between; margin-bottom:14px;">
-    <h2 style="margin:0;">镜头素材（{{ shots | length }} 个 · 每个 4s）</h2>
+    <h2 style="margin:0;">{{ '房间素材' if p.mode=='image' else '镜头素材' }}（{{ shots | length }} 个 · 每个 4s · {{ '同风格其他房间' if p.mode=='image' else '真实帧风格改造' }}）</h2>
     <div class="muted" style="font-size:13px;">
       {% set imgs = shots | selectattr('image_status','equalto','done') | list %}
       {% set clps = shots | selectattr('clip_status','equalto','done') | list %}
-      图片 {{ imgs | length }}/{{ shots | length }} · 视频 {{ clps | length }}/{{ shots | length }}
+      风格图 {{ imgs | length }}/{{ shots | length }} · 视频 {{ clps | length }}/{{ shots | length }}
     </div>
   </div>
 
   {% if shots %}
-  <div class="row" style="margin-bottom:14px; background:var(--panel-2); padding:12px; border-radius:8px; align-items:center; gap:12px;">
-    <div style="font-weight:bold;">智能剪辑 (quick-cut)</div>
-    <input type="text" id="qc_title" placeholder="主标题文字" style="padding:6px; border-radius:4px; border:1px solid var(--border); background:var(--panel); color:var(--text); width:180px;">
-    <input type="text" id="qc_accent" placeholder="强调词(可选)" style="padding:6px; border-radius:4px; border:1px solid var(--border); background:var(--panel); color:var(--text); width:120px;">
-    <button class="btn" onclick="runQuickCut('{{ p.project_id }}')">生成混剪</button>
-    <div id="qc_status" class="muted" style="font-size:13px; margin-left:auto;"></div>
-  </div>
-
-  <!-- 智能剪辑结果展示 -->
-  <div id="qc_result_container" style="display:none; margin-bottom:14px; text-align:center; background:var(--panel-2); padding:16px; border-radius:8px;">
-    <h3 style="margin-top:0;">智能剪辑结果</h3>
-    <video id="qc_result_video" controls style="max-height:400px; border-radius:8px;"></video>
-  </div>
-
-  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
     {% for s in shots %}
     <div class="shot-card">
       {% if s.clip_status == 'done' and s.clip_path %}
-      <video src="/api/media?path={{ s.clip_path | urlencode }}" controls preload="metadata"></video>
+      <video src="/api/media?path={{ s.clip_path }}" controls preload="metadata"></video>
       {% elif s.image_status == 'done' and s.image_path %}
-      <img src="/api/media?path={{ s.image_path | urlencode }}">
+      <img src="/api/media?path={{ s.image_path }}">
       {% else %}
-      <div class="muted" style="height:170px; display:flex; align-items:center; justify-content:center; background:var(--panel);">未生成</div>
+      <div class="muted" style="height:180px; display:flex; align-items:center; justify-content:center; background:var(--panel);">未生成</div>
       {% endif %}
       <div class="meta">
-        <div class="t" style="display:flex; align-items:center; justify-content:space-between;">
-          <span>
-            shot_{{ "%02d" | format(s.shot_id) }}
-            <span class="tag {{ 'green' if s.clip_status=='done' else 'red' if s.clip_status=='failed' else 'yellow' }}" style="margin-left:6px;">{{ s.clip_status }}</span>
-          </span>
-          {% if s.clip_status == 'done' and s.clip_path %}
-          <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-weight:normal; font-size:13px;">
-            <input type="checkbox" class="qc-checkbox" value="{{ s.clip_path }}" checked>
-            选入剪辑
-          </label>
+        <div class="t">{% if p.mode=='image' and s.room_type %}{{ s.room_type }}{% else %}shot_{{ "%02d" | format(s.shot_id) }}{% endif %}
+          <span class="tag {{ 'green' if s.clip_status=='done' else 'red' if s.clip_status=='failed' else 'yellow' }}" style="margin-left:6px;">{{ s.clip_status }}</span>
+          <span class="muted" style="margin-left:6px; font-weight:400;">{% if p.mode=='image' and s.viewpoint %}{{ s.viewpoint }} · {% endif %}{{ s.camera_move }}</span>
+        </div>
+        <!-- 参考图/基底帧 → 生成图 对比 -->
+        <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">
+          {% if p.mode == 'image' %}
+          <div style="flex:1; text-align:center;">
+            <a href="/api/media?path={{ p.source_image | urlencode }}" target="_blank">
+              <img src="/api/media?path={{ p.source_image | urlencode }}" style="width:100%; height:70px; object-fit:cover; border-radius:5px; border:1px solid var(--border);">
+            </a>
+            <div class="muted" style="font-size:11px;">参考图</div>
+          </div>
+          {% else %}
+          <div style="flex:1; text-align:center;">
+            <a href="/api/media?path={{ s.clean_frame_path | urlencode }}" target="_blank">
+              <img src="/api/media?path={{ s.clean_frame_path | urlencode }}" style="width:100%; height:70px; object-fit:cover; border-radius:5px; border:1px solid var(--border);">
+            </a>
+            <div class="muted" style="font-size:11px;">基底帧</div>
+          </div>
+          {% endif %}
+          <span style="color:var(--muted);">→</span>
+          {% if s.image_status == 'done' and s.image_path %}
+          <div style="flex:1; text-align:center;">
+            <a href="/api/media?path={{ s.image_path | urlencode }}" target="_blank">
+              <img src="/api/media?path={{ s.image_path | urlencode }}" style="width:100%; height:70px; object-fit:cover; border-radius:5px; border:1px solid var(--accent);">
+            </a>
+            <div style="font-size:11px; color:var(--accent);">风格图</div>
+          </div>
+          {% else %}
+          <div style="flex:1;"></div>
           {% endif %}
         </div>
-        <div class="muted">{{ s.room_type }} · {{ s.viewpoint }} · {{ s.camera_move }}</div>
-        <div style="margin-top:8px;">
+        <div style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          {% if s.clip_status == 'done' and s.clip_path %}
+          <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--accent); cursor:pointer; user-select:none;">
+            <input type="checkbox" class="clip-check" value="{{ s.clip_path }}"> 选用
+          </label>
+          {% elif s.clip_status == 'failed' or s.image_status == 'failed' %}
+          <button class="ghost" style="padding:2px 8px; font-size:12px;" onclick="retryShot('{{ p.project_id }}', {{ s.shot_id }})">重新生成</button>
+          {% endif %}
           {% if s.image_status == 'done' and s.image_path %}
-          <a class="btn ghost" href="/api/media?path={{ s.image_path | urlencode }}" download style="padding:5px 12px; font-size:12px;">下载图</a>
+          <a class="btn ghost" href="/api/media?path={{ s.image_path }}" download style="padding:5px 12px; font-size:12px;">下载图</a>
           {% endif %}
           {% if s.clip_status == 'done' and s.clip_path %}
-          <a class="btn ghost" href="/api/media?path={{ s.clip_path | urlencode }}" download style="padding:5px 12px; font-size:12px; margin-left:6px;">下载视频</a>
+          <a class="btn ghost" href="/api/media?path={{ s.clip_path }}" download style="padding:5px 12px; font-size:12px;">下载视频</a>
           {% endif %}
         </div>
       </div>
@@ -132,78 +142,34 @@
   {% endif %}
 </div>
 
-<script>
-async function runQuickCut(projectId) {
-  const statusEl = document.getElementById('qc_status');
-  const title = document.getElementById('qc_title').value.trim();
-  const accent = document.getElementById('qc_accent').value.trim();
-  
-  const checkboxes = document.querySelectorAll('.qc-checkbox:checked');
-  const clipPaths = Array.from(checkboxes).map(cb => cb.value);
-
-  if (!title) {
-    alert("请填写主标题文字");
-    return;
-  }
-  if (clipPaths.length === 0) {
-    alert("请至少选择一个视频素材");
-    return;
-  }
-
-  statusEl.innerText = "任务已提交，正在后台生成...";
-  statusEl.style.color = "var(--yellow)";
-  
-  try {
-    const res = await fetch(`/api/projects/${projectId}/quick_cut`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clip_paths: clipPaths, title: title, accent: accent })
-    });
-    
-    if (res.ok) {
-      statusEl.innerText = "任务运行中... (可查看后台日志)";
-      // 为了简单演示，我们使用长轮询或延迟拉取结果。实际项目中可根据返回的 job_id 轮询。
-      checkQuickCutJob();
-    } else {
-      const err = await res.json();
-      statusEl.innerText = "错误: " + (err.error || "未知错误");
-      statusEl.style.color = "var(--red)";
-    }
-  } catch (e) {
-    statusEl.innerText = "网络错误";
-    statusEl.style.color = "var(--red)";
-  }
-}
-
-// 简单轮询接口 (由于 app.py 中没有做专门的 job 状态接口暴露给具体 project，我们可以轮询所有 jobs 找到最新的)
-async function checkQuickCutJob() {
-  const statusEl = document.getElementById('qc_status');
-  try {
-    const res = await fetch('/api/jobs');
-    const jobs = await res.json();
-    const myJob = jobs.find(j => j.type === 'quick_cut'); // 简化逻辑: 找最新的 quick_cut job
-    
-    if (myJob) {
-      if (myJob.status === 'done') {
-        statusEl.innerText = "生成完成！";
-        statusEl.style.color = "var(--green)";
-        const resContainer = document.getElementById('qc_result_container');
-        const resVideo = document.getElementById('qc_result_video');
-        resContainer.style.display = "block";
-        resVideo.src = "/api/media?path=" + encodeURIComponent(myJob.output_path);
-        return;
-      } else if (myJob.status === 'failed') {
-        statusEl.innerText = "生成失败: " + myJob.error;
-        statusEl.style.color = "var(--red)";
-        return;
-      }
-    }
-    // 继续轮询
-    setTimeout(checkQuickCutJob, 3000);
-  } catch(e) {
-    setTimeout(checkQuickCutJob, 3000);
-  }
-}
-</script>
+<!-- 一键剪辑成片 -->
+{% if clps %}
+<div class="panel" id="quickCutPanel">
+  <h2>一键剪辑成片</h2>
+  <div class="muted" style="font-size:13px; margin-bottom:12px;">
+    勾选上方 4s 素材 → 选择剪辑技能 → 填写标题 → 自动合成成片。
+  </div>
+  <div class="row" style="align-items:center; gap:10px; flex-wrap:wrap;">
+    <select id="qcSkill" style="background:var(--panel-2); border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:var(--text); font-size:14px;">
+      <option value="quick-cut" selected>quick-cut (参考视频节奏卡点混剪)</option>
+      <option value="before-after-cloud-editor">before-after-cloud-editor (前后对比模板剪辑)</option>
+      <option value="koubo">koubo (IP角色 Reel快剪)</option>
+      <option value="shenghuo">shenghuo (生活家居淡雅慢剪)</option>
+    </select>
+    <input id="qcTitle" type="text" placeholder="成片标题 Caption Title（必填）"
+           style="flex:1; min-width:180px; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:var(--text); font-size:14px;">
+    <input id="qcAccent" type="text" placeholder="强调词/强调色(可选)"
+           style="flex:0 0 160px; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:var(--text); font-size:14px;">
+    <button class="ghost" onclick="selectAllClips(true)">全选</button>
+    <button class="ghost" onclick="selectAllClips(false)">清空</button>
+    <button id="qcBtn" onclick="quickCut('{{ p.project_id }}')">剪辑成片</button>
+  </div>
+  <div id="qcStatus" style="margin-top:12px; display:none;">
+    <div class="muted" style="font-size:13px;" id="qcText">剪辑中...</div>
+    <div class="progress-bar"><div id="qcBar" style="width:0%"></div></div>
+  </div>
+  <div id="qcResult" style="margin-top:16px;"></div>
+</div>
+{% endif %}
 
 {% endblock %}

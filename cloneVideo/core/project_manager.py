@@ -63,15 +63,23 @@ class ProjectManager:
 
     def create_project(
         self,
-        source_video: str,
+        source_video: str = "",
         source_resolution: tuple[int, int] = (0, 0),
         aspect_ratio: str = "16:9",
+        source_image: str = "",
+        mode: str = "video",
     ) -> dict[str, Any]:
         """创建新的复刻项目
 
+        保持 (source_video, source_resolution, aspect_ratio) 的位置参数顺序以向后兼容，
+        图片模式用关键字传 source_image / mode。
+
         Args:
-            source_resolution: 源视频分辨率 (width, height)，用于让生成尺寸跟随源视频
-            aspect_ratio: 由源视频分辨率推导的 "W:H" 字符串
+            source_video: 视频模式的源视频路径
+            source_resolution: 源素材分辨率 (width, height)，用于让生成尺寸跟随源素材
+            aspect_ratio: 由源素材分辨率推导的 "W:H" 字符串
+            source_image: 图片模式的参考图路径(如客厅图)
+            mode: "video"(视频复刻) | "image"(单图风格复刻)
         """
         project_id = uuid.uuid4().hex[:8]
 
@@ -80,8 +88,10 @@ class ProjectManager:
 
         project: dict[str, Any] = {
             "project_id": project_id,
+            "mode": mode,               # video | image
             "status": "uploaded",
             "source_video": source_video,
+            "source_image": source_image,
             "source_resolution": {"width": source_resolution[0], "height": source_resolution[1]},
             "aspect_ratio": aspect_ratio,
             "video_duration": 0.0,

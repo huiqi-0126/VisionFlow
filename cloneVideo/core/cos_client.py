@@ -6,12 +6,18 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import logging
 import uuid
 from datetime import date
 from pathlib import Path
 
-import tos
+# tos SDK 在 import 时会顶层执行一段 docx 解析演示代码，
+# 向 stdout 打印大量无关内容(如 "TOC instr" / "XXXX系统软件设计说明")。
+# 在 import 点抑制其 stdout 噪音, 不影响功能; 异常仍会正常抛出。
+with contextlib.redirect_stdout(io.StringIO()):
+    import tos
 
 logger = logging.getLogger(__name__)
 

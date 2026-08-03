@@ -39,7 +39,7 @@ class Settings:
     # 尺寸跟随源视频: aspect_ratio 在 pipeline 运行时根据源视频分辨率动态设置
     default_video_model: str = "seedance-2.0-fast"
     default_image_model: str = "gemini-3.0"
-    default_size: str = "1080p"
+    default_size: str = "720p"
     default_duration: str = "4"            # 室内素材固定 4 秒
     default_aspect_ratio: str = "16:9"     # 兜底，运行时会被源视频实际比例覆盖
 
@@ -53,7 +53,7 @@ class Settings:
 
     # --- 镜头规划参数 ---
     # 镜头数按源视频时长智能推导 (见 shot_planner.calc_num_shots), 这里只设上下限
-    min_shots: int = 4                    # 最短视频也至少给 4 个镜头
+    min_shots: int = 8                    # 至少 8 张风格图/素材
     max_shots: int = 15                   # 无论视频多长, 最多 15 个镜头
     clip_duration: int = 4                # 每个素材片段固定 4 秒
 

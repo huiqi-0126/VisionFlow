@@ -1,32 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="row" style="align-items: flex-start;">
+<div class="row" style="align-items: stretch;">
 
-  <!-- 左: 上传 + 新建 -->
-  <div class="panel" style="flex: 1 1 380px;">
-    <h2>上传装修视频</h2>
-    <div id="uploadZone" class="upload-zone">
+  <!-- 视频模式 -->
+  <div class="panel" style="flex: 1 1 400px; display:flex; flex-direction:column;">
+    <h2>📹 视频模式</h2>
+    <div class="muted" style="font-size:13px; margin-bottom:12px;">上传装修视频 → 抽真实帧 → 统一改风格 → 8~15 个 4s 素材</div>
+    <div id="videoZone" class="upload-zone">
       <div class="big">点击或拖拽视频到这里</div>
-      <div class="hint">支持 mp4 / mov / mkv / webm · 画幅自动跟随源视频</div>
-      <input id="fileInput" type="file" accept="video/*" style="display:none">
+      <div class="hint">mp4 / mov / mkv / webm · 画幅自动跟随源视频</div>
+      <input id="videoInput" type="file" accept="video/*" style="display:none">
     </div>
-    <div id="fileInfo" style="margin-top:14px; display:none;" class="kv">
-      <div class="k">文件</div><div id="fName">-</div>
-      <div class="k">大小</div><div id="fSize">-</div>
-      <div class="k">路径</div><div id="fPath" class="muted">-</div>
+    <div id="videoInfo" style="margin-top:14px; display:none;" class="kv">
+      <div class="k">文件</div><div id="vName">-</div>
+      <div class="k">大小</div><div id="vSize">-</div>
     </div>
     <div style="margin-top:14px;">
-      <button id="startBtn" disabled>开始复刻（镜头数按时长推导 × 4s 素材）</button>
+      <button id="videoBtn" disabled>开始复刻（视频 → 真实帧风格改造）</button>
     </div>
-    <div id="jobStatus" style="margin-top:12px; display:none;">
-      <div class="muted" style="font-size:13px;" id="jobText">准备中...</div>
-      <div class="progress-bar"><div id="jobBar" style="width:0%"></div></div>
+    <div id="videoJob" style="margin-top:12px; display:none;">
+      <div class="muted" style="font-size:13px;" id="videoJobText">准备中...</div>
+      <div class="progress-bar"><div id="videoJobBar" style="width:0%"></div></div>
     </div>
   </div>
 
-  <!-- 右: 统计 -->
-  <div class="panel" style="flex: 0 0 240px;">
+  <!-- 图片模式 -->
+  <div class="panel" style="flex: 1 1 400px; display:flex; flex-direction:column;">
+    <h2>🖼️ 图片模式</h2>
+    <div class="muted" style="font-size:13px; margin-bottom:12px;">上传一张客厅图 → 生成同风格其他房间 → 每图 4s 素材</div>
+    <div id="imageZone" class="upload-zone">
+      <div class="big">点击或拖拽客厅图片到这里</div>
+      <div class="hint">jpg / jpeg / png / webp · 画幅自动跟随图片</div>
+      <input id="imageInput" type="file" accept="image/*" style="display:none">
+    </div>
+    <div id="imageInfo" style="margin-top:14px; display:none;" class="kv">
+      <div class="k">文件</div><div id="iName">-</div>
+      <div class="k">大小</div><div id="iSize">-</div>
+    </div>
+    <div style="margin-top:12px;">
+      <label style="font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px;">
+        生成房间数:
+        <input id="numRooms" type="number" value="7" min="1" max="15"
+               style="width:64px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:6px 8px; color:var(--text);">
+      </label>
+    </div>
+    <div style="margin-top:14px;">
+      <button id="imageBtn" disabled>开始复刻（客厅图 → 同风格其他房间）</button>
+    </div>
+    <div id="imageJob" style="margin-top:12px; display:none;">
+      <div class="muted" style="font-size:13px;" id="imageJobText">准备中...</div>
+      <div class="progress-bar"><div id="imageJobBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- 统计 -->
+  <div class="panel" style="flex: 0 0 210px;">
     <h2>统计</h2>
     <div class="kv">
       <div class="k">总项目</div><div>{{ stats.total }}</div>

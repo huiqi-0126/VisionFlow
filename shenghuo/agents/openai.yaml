@@ -1,0 +1,13 @@
+interface:
+  display_name: "Home Peace Cloud Replica"
+  short_description: "Create seven home scenes and a 21-second cloud edit"
+  default_prompt: "Use $home-peace-cloud-replica to turn my home-style references into a seven-shot cloud-rendered video."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "higgsfield"
+      description: "Higgsfield image and video generation"
+      transport: "streamable_http"
+      url: "https://mcp.higgsfield.ai/mcp"
+policy:
+  allow_implicit_invocation: true
