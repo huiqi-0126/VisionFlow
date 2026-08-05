@@ -115,6 +115,7 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=1080)
     parser.add_argument("--height", type=int, default=1920)
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--edit-mode", choices=("reference", "fast", "narrative", "subject"), default="reference")
     parser.add_argument("--scene-threshold", type=float, default=0.08)
     parser.add_argument("--min-shot-gap", type=float, default=0.055)
     parser.add_argument("--white", default="#FFFFFF")
@@ -136,6 +137,9 @@ def main() -> int:
     if missing:
         parser.error("Missing input file(s): " + ", ".join(missing))
 
+    mode_settings = {"reference": (0.08, 0.055), "fast": (0.045, 0.035), "narrative": (0.14, 0.30), "subject": (0.075, 0.12)}[args.edit_mode]
+    if args.edit_mode != "reference":
+        args.scene_threshold, args.min_shot_gap = mode_settings
     info = analyze(args.reference, args.scene_threshold, args.min_shot_gap)
     source_info = [probe(path) for path in args.sources]
     duration = info["duration"]
@@ -167,10 +171,16 @@ def main() -> int:
             frames = end_frame - start_frame
             view_index = shot % view_count
             source_index = view_index if view_index < source_count else view_index - source_count
+            if args.edit_mode == "narrative":
+                source_index = min(source_count - 1, int(shot * source_count / max(1, len(frame_boundaries) - 1)))
+                view_index = source_index
+            elif args.edit_mode == "subject":
+                source_index = 0 if shot % 3 != 2 else (shot // 3) % source_count
+                view_index = source_count if shot % 2 else source_index
             source = args.sources[source_index]
             segment_duration = frames / args.fps
             available = source_info[source_index]["duration"]
-            nominal_start = 0.35 + view_index * 0.11
+            nominal_start = (shot / max(1, len(frame_boundaries) - 1)) * available if args.edit_mode == "narrative" else 0.35 + view_index * 0.11
             source_start = max(0.0, min(nominal_start, available - segment_duration - 0.08))
             vf = source_filter(view_index, source_count, args.width, args.height, args.fps, args.grade_filter)
             segment = segments / f"segment_{shot + 1:03d}.mp4"
@@ -288,6 +298,9 @@ def main() -> int:
 
         manifest = {
             "skill": "quick-cut",
+            "edit_mode": args.edit_mode,
+            "scene_threshold": args.scene_threshold,
+            "min_shot_gap": args.min_shot_gap,
             "reference_analysis": info,
             "title": args.title,
             "accent": args.accent,

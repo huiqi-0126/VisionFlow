@@ -23,6 +23,7 @@ from config import get_settings
 from core.project_manager import ProjectManager
 from workflow.pipeline import CloneVideoPipeline
 from workflow.image_pipeline import ImageClonePipeline
+from workflow.replica_pipeline import ReplicaPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 pipeline = CloneVideoPipeline(settings)
 image_pipeline = ImageClonePipeline(settings)
+replica_pipeline = ReplicaPipeline(settings)
 project_mgr = ProjectManager(settings.data_dir, settings.projects_dir)
 
 WEB_DIR = Path(__file__).resolve().parent
@@ -92,10 +94,40 @@ def _run_image_clone(job_id: str, image_path: str, num_rooms: int) -> None:
             _jobs[job_id]["error"] = str(exc)
 
 
+def _run_replica(job_id: str, video_path: str) -> None:
+    """完全复刻后台任务: 关键帧作首帧→运镜还原→4s片段→合并完整视频"""
+    try:
+        result = replica_pipeline.run(video_path)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = result.get("status", "failed")
+            _jobs[job_id]["project_id"] = result.get("project_id", "")
+            _jobs[job_id]["result"] = result
+    except Exception as exc:
+        logger.error("Replica job %s failed: %s", job_id, exc)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(exc)
+
+
+def _run_replica_resume(job_id: str, project_id: str) -> None:
+    """完全复刻恢复任务: 从生成片段开始继续"""
+    try:
+        result = replica_pipeline.run(resume_project_id=project_id)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = result.get("status", "failed")
+            _jobs[job_id]["project_id"] = result.get("project_id", "")
+            _jobs[job_id]["result"] = result
+    except Exception as exc:
+        logger.error("Replica resume job %s failed: %s", job_id, exc)
+        with _jobs_lock:
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(exc)
+
+
 def _run_quick_cut(job_id: str, project_id: str, clip_paths: list[str], title: str, accent: str, skill: str = "quick-cut") -> None:
     try:
         output_path = _PROJECT_ROOT / "output" / "projects" / project_id / "quick_cut_output.mp4"
-        ref_video = _PROJECT_ROOT / "example .mp4"
+        ref_video = _PROJECT_ROOT / "example.mp4"
         
         import os
         import shutil
@@ -338,6 +370,52 @@ async def api_replicate_image(request: Request):
     return {"job_id": job_id, "status": "started"}
 
 
+@app.post("/api/replica")
+async def api_replica(request: Request):
+    """完全复刻: 关键帧作首帧→运镜还原→4s片段→合并完整视频(后台执行)"""
+    data = await request.json()
+    video_path = data.get("video_path", "")
+
+    if not video_path or not Path(video_path).exists():
+        return JSONResponse({"error": "视频文件不存在"}, status_code=400)
+
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "id": job_id,
+            "type": "replica",
+            "video_path": video_path,
+            "status": "running",
+            "project_id": "",
+        }
+
+    t = threading.Thread(target=_run_replica, args=(job_id, video_path), daemon=True)
+    t.start()
+    return {"job_id": job_id, "status": "started"}
+
+
+@app.post("/api/projects/{project_id}/resume_replica")
+async def api_resume_replica(project_id: str):
+    """恢复完全复刻项目(从生成片段开始)"""
+    project = project_mgr.get_project(project_id)
+    if not project:
+        return JSONResponse({"error": "项目不存在"}, status_code=404)
+    if project.get("mode") != "replica":
+        return JSONResponse({"error": "该项目不是完全复刻模式"}, status_code=400)
+
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "id": job_id,
+            "type": "resume_replica",
+            "status": "running",
+            "project_id": project_id,
+        }
+    t = threading.Thread(target=_run_replica_resume, args=(job_id, project_id), daemon=True)
+    t.start()
+    return {"job_id": job_id, "status": "started"}
+
+
 @app.post("/api/projects/{project_id}/resume")
 async def api_resume(project_id: str):
     """恢复已有项目(从生成素材开始)"""
@@ -363,28 +441,33 @@ async def api_retry_shot(project_id: str, shot_id: int):
     project = project_mgr.get_project(project_id)
     if not project:
         return JSONResponse({"error": "项目不存在"}, status_code=404)
-        
+
+    is_replica = project.get("mode") == "replica"
+
     shot_plan = project.get("shot_plan", [])
     for shot in shot_plan:
         if shot.get("shot_id") == shot_id:
             shot["clip_status"] = "pending"
             shot["clip_path"] = ""
-            # 如果图片也失败了，顺便把图片状态也重置
-            if shot.get("image_status") == "failed":
+            # 如果图片也失败了，顺便把图片状态也重置（replica 模式无图片，跳过）
+            if not is_replica and shot.get("image_status") == "failed":
                 shot["image_status"] = "pending"
             break
-            
+
     project_mgr.update_project(project_id, shot_plan=shot_plan, status="generating_clips")
-    
+
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
         _jobs[job_id] = {
             "id": job_id,
-            "type": "resume",
+            "type": "resume_replica" if is_replica else "resume",
             "status": "running",
             "project_id": project_id,
         }
-    t = threading.Thread(target=_run_resume, args=(job_id, project_id), daemon=True)
+    if is_replica:
+        t = threading.Thread(target=_run_replica_resume, args=(job_id, project_id), daemon=True)
+    else:
+        t = threading.Thread(target=_run_resume, args=(job_id, project_id), daemon=True)
     t.start()
     return {"job_id": job_id, "status": "started"}
 

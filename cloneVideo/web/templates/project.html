@@ -5,13 +5,14 @@
 {% set sp = p.style_profile or {} %}
 {% set shots = p.shot_plan or [] %}
 {% set keyframes = p.keyframes or [] %}
+{% set is_replica = p.mode == 'replica' %}
 
 <div class="panel">
   <div class="row" style="align-items: center; justify-content: space-between;">
     <div>
       <h2 style="margin-bottom:6px;">项目 <code>{{ p.project_id }}</code></h2>
       <div class="muted" style="font-size:13px;">
-        <span class="tag {{ 'blue' if p.mode=='image' else 'green' }}" style="margin-right:8px;">{{ '图片模式' if p.mode=='image' else '视频模式' }}</span>
+        <span class="tag {{ 'blue' if is_replica else 'green' if p.mode=='image' else '' }}" style="margin-right:8px;">{{ '完全复刻' if is_replica else '图片模式' if p.mode=='image' else '视频模式' }}</span>
         {{ p.source_image if p.mode=='image' else p.source_video }} · {{ p.aspect_ratio }}
         {% if p.mode != 'image' %} · {{ "%.1f"|format(p.video_duration or 0) }}s{% endif %} · {{ p.created_at[:19] }}
       </div>
@@ -19,13 +20,14 @@
     <div>
       <span class="tag {{ 'green' if p.status=='done' else 'red' if p.status=='failed' else 'yellow' }}">{{ p.status }}</span>
       {% if p.status != 'done' and shots %}
-      <button class="ghost" onclick="resumeProject('{{ p.project_id }}')">恢复生成</button>
+      <button class="ghost" onclick="resumeProject('{{ p.project_id }}', '{{ p.mode }}')">恢复生成</button>
       {% endif %}
     </div>
   </div>
 </div>
 
-<!-- 统一目标风格决策 -->
+<!-- 统一目标风格决策（完全复刻模式无此步骤，跳过） -->
+{% if not is_replica %}
 <div class="panel">
   <h2>{{ '参考图风格（锚定）' if p.mode=='image' else '统一目标风格（AI 推荐）' }}</h2>
   {% if sp %}
@@ -61,15 +63,28 @@
   <div class="muted">尚未生成风格决策。</div>
   {% endif %}
 </div>
+{% endif %}
+
+<!-- 完全复刻成片（仅 replica 模式且有 final_video 时显示） -->
+{% if is_replica and p.final_video %}
+<div class="panel" style="border-color: var(--accent-2);">
+  <h2>完全复刻成片</h2>
+  <div style="display:flex; flex-direction:column; align-items:center; margin-top:10px;">
+    <video src="/api/media?path={{ p.final_video | urlencode }}" controls style="max-height:720px; max-width:100%; border-radius:8px; background:#000; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></video>
+    <div style="margin-top:10px;">
+      <a class="btn" href="/api/media?path={{ p.final_video | urlencode }}" download>下载完整视频</a>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- 镜头素材 -->
 <div class="panel">
   <div class="row" style="align-items:center; justify-content:space-between; margin-bottom:14px;">
-    <h2 style="margin:0;">{{ '房间素材' if p.mode=='image' else '镜头素材' }}（{{ shots | length }} 个 · 每个 4s · {{ '同风格其他房间' if p.mode=='image' else '真实帧风格改造' }}）</h2>
+    <h2 style="margin:0;">{% if is_replica %}运镜片段{% elif p.mode=='image' %}房间素材{% else %}镜头素材{% endif %}（{{ shots | length }} 个 · 每个 4s · {% if is_replica %}关键帧首帧 + 运镜还原{% elif p.mode=='image' %}同风格其他房间{% else %}真实帧风格改造{% endif %}）</h2>
     <div class="muted" style="font-size:13px;">
-      {% set imgs = shots | selectattr('image_status','equalto','done') | list %}
       {% set clps = shots | selectattr('clip_status','equalto','done') | list %}
-      风格图 {{ imgs | length }}/{{ shots | length }} · 视频 {{ clps | length }}/{{ shots | length }}
+      {% if not is_replica %}{% set imgs = shots | selectattr('image_status','equalto','done') | list %}风格图 {{ imgs | length }}/{{ shots | length }} · {% endif %}视频 {{ clps | length }}/{{ shots | length }}
     </div>
   </div>
 
@@ -79,17 +94,22 @@
     <div class="shot-card">
       {% if s.clip_status == 'done' and s.clip_path %}
       <video src="/api/media?path={{ s.clip_path }}" controls preload="metadata"></video>
+      {% elif is_replica and s.frame_path %}
+      <img src="/api/media?path={{ s.frame_path | urlencode }}">
       {% elif s.image_status == 'done' and s.image_path %}
       <img src="/api/media?path={{ s.image_path }}">
       {% else %}
       <div class="muted" style="height:180px; display:flex; align-items:center; justify-content:center; background:var(--panel);">未生成</div>
       {% endif %}
       <div class="meta">
-        <div class="t">{% if p.mode=='image' and s.room_type %}{{ s.room_type }}{% else %}shot_{{ "%02d" | format(s.shot_id) }}{% endif %}
+        <div class="t">{% if is_replica %}shot_{{ "%02d" | format(s.shot_id) }} · {{ "%.1f"|format(s.timestamp or 0) }}s{% elif p.mode=='image' and s.room_type %}{{ s.room_type }}{% else %}shot_{{ "%02d" | format(s.shot_id) }}{% endif %}
           <span class="tag {{ 'green' if s.clip_status=='done' else 'red' if s.clip_status=='failed' else 'yellow' }}" style="margin-left:6px;">{{ s.clip_status }}</span>
-          <span class="muted" style="margin-left:6px; font-weight:400;">{% if p.mode=='image' and s.viewpoint %}{{ s.viewpoint }} · {% endif %}{{ s.camera_move }}</span>
+          <span class="muted" style="margin-left:6px; font-weight:400;">{{ s.camera_move }}</span>
         </div>
-        <!-- 参考图/基底帧 → 生成图 对比 -->
+        {% if is_replica and s.scene_desc_cn %}
+        <div class="muted" style="font-size:12px; margin-top:4px;">{{ s.scene_desc_cn }}</div>
+        {% endif %}
+        <!-- 首帧/基底帧 → 生成结果 对比 -->
         <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">
           {% if p.mode == 'image' %}
           <div style="flex:1; text-align:center;">
@@ -100,12 +120,16 @@
           </div>
           {% else %}
           <div style="flex:1; text-align:center;">
-            <a href="/api/media?path={{ s.clean_frame_path | urlencode }}" target="_blank">
-              <img src="/api/media?path={{ s.clean_frame_path | urlencode }}" style="width:100%; height:70px; object-fit:cover; border-radius:5px; border:1px solid var(--border);">
+            {% set bf = s.frame_path if is_replica else s.clean_frame_path %}
+            {% if bf %}
+            <a href="/api/media?path={{ bf | urlencode }}" target="_blank">
+              <img src="/api/media?path={{ bf | urlencode }}" style="width:100%; height:70px; object-fit:cover; border-radius:5px; border:1px solid var(--border);">
             </a>
-            <div class="muted" style="font-size:11px;">基底帧</div>
+            {% endif %}
+            <div class="muted" style="font-size:11px;">{{ '首帧' if is_replica else '基底帧' }}</div>
           </div>
           {% endif %}
+          {% if not is_replica %}
           <span style="color:var(--muted);">→</span>
           {% if s.image_status == 'done' and s.image_path %}
           <div style="flex:1; text-align:center;">
@@ -116,6 +140,7 @@
           </div>
           {% else %}
           <div style="flex:1;"></div>
+          {% endif %}
           {% endif %}
         </div>
         <div style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">

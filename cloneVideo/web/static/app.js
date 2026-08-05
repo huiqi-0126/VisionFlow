@@ -92,6 +92,15 @@
     }),
   });
 
+  // 完全复刻模式
+  setupMode({
+    zone: "#replicaZone", input: "#replicaInput", info: "#replicaInfo",
+    fName: "#rName", fSize: "#rSize", btn: "#replicaBtn",
+    job: "#replicaJob", jobText: "#replicaJobText", jobBar: "#replicaJobBar",
+    kind: "video", url: "/api/replica",
+    buildBody: (p) => ({ video_path: p }),
+  });
+
   // ── 任务轮询 ────────────────────────────────────────────
   function pollJob(jobId, btn, textSel, barSel) {
     const text = $(textSel);
@@ -121,11 +130,14 @@
   }
 
   // ── 恢复 / 重试 / 删除（全局）────────────────────────────
-  window.resumeProject = async function (pid) {
+  window.resumeProject = async function (pid, mode) {
     if (!confirm("恢复项目 " + pid + " 继续生成？")) return;
+    const resumeUrl = mode === "replica"
+      ? "/api/projects/" + pid + "/resume_replica"
+      : "/api/projects/" + pid + "/resume";
     toast("提交恢复任务...");
     try {
-      const resp = await fetch("/api/projects/" + pid + "/resume", { method: "POST" });
+      const resp = await fetch(resumeUrl, { method: "POST" });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "提交失败");
       toast("恢复任务已启动，请稍后刷新查看", "ok");

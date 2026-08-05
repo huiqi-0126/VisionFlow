@@ -99,6 +99,47 @@ def run(video_path: str | None, resume: str) -> None:
         ))
 
 
+# ── replica ─────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("video_path", type=click.Path(exists=True), required=False)
+@click.option("--resume", type=str, default="", help="基于已有项目 ID 恢复并继续(从生成片段开始)")
+def replica(video_path: str | None, resume: str) -> None:
+    """完全复刻: 关键帧作首帧 → 理解运镜 → 4s 片段 → 合并完整视频
+
+    VIDEO_PATH: 源视频文件路径
+
+    截取视频关键帧作为首帧, VLM 理解原片运镜方式, 逐帧生成 4s 片段,
+    最后合并成与原片基本一样的完整视频(静音)。
+    """
+    from workflow.replica_pipeline import ReplicaPipeline
+
+    settings = get_settings()
+    pipeline = ReplicaPipeline(settings)
+    try:
+        result = pipeline.run(video_path, resume_project_id=resume or None)
+    except Exception as e:
+        console.print(f"[red]错误: {e}[/]")
+        return
+
+    if result.get("status") == "done":
+        console.print(Panel(
+            f"[green]完全复刻完成[/]\n"
+            f"项目 ID: {result.get('project_id', '')}\n"
+            f"画幅: {result.get('aspect_ratio', '')}\n"
+            f"片段数: {len(result.get('clips', []))}\n"
+            f"完整视频: {result.get('final_video', '')}",
+            title="[bold]完成[/]",
+            border_style="green",
+        ))
+    else:
+        console.print(Panel(
+            f"[red]复刻失败[/]\n{result.get('error', '未知错误')}",
+            title="失败",
+            border_style="red",
+        ))
+
+
 # ── projects ──────────────────────────────────────────────────
 
 @cli.command("projects")

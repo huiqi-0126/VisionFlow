@@ -59,6 +59,14 @@ class ProjectManager:
     def _flush(self) -> None:
         _save_projects(self._path, self._projects)
 
+    def _reload(self) -> None:
+        """从文件重新加载项目列表到内存
+
+        解决多实例（web 进程 vs pipeline 线程各自持有 ProjectManager）的缓存不同步问题：
+        每次读写前重新读文件，确保总能看到其他实例的最新写入。
+        """
+        self._projects = _load_projects(self._path)
+
     # ── CRUD ──────────────────────────────────────────────────
 
     def create_project(
@@ -85,6 +93,7 @@ class ProjectManager:
 
         project_dir = self._output_dir / project_id
         project_dir.mkdir(parents=True, exist_ok=True)
+        self._reload()
 
         project: dict[str, Any] = {
             "project_id": project_id,
@@ -113,12 +122,14 @@ class ProjectManager:
         return project
 
     def get_project(self, project_id: str) -> dict[str, Any] | None:
+        self._reload()
         for p in self._projects:
             if p["project_id"] == project_id:
                 return p
         return None
 
     def update_project(self, project_id: str, **kwargs: Any) -> dict[str, Any]:
+        self._reload()
         for p in self._projects:
             if p["project_id"] == project_id:
                 p.update(kwargs)
@@ -135,6 +146,7 @@ class ProjectManager:
         **kwargs: Any,
     ) -> dict[str, Any] | None:
         """更新镜头清单中某个 shot 的字段"""
+        self._reload()
         project = self.get_project(project_id)
         if not project:
             return None
@@ -150,12 +162,14 @@ class ProjectManager:
         status: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
+        self._reload()
         result = self._projects
         if status:
             result = [p for p in result if p.get("status") == status]
         return result[-limit:]
 
     def delete_project(self, project_id: str) -> bool:
+        self._reload()
         before = len(self._projects)
         self._projects = [p for p in self._projects if p["project_id"] != project_id]
         if len(self._projects) < before:
@@ -165,6 +179,7 @@ class ProjectManager:
         return False
 
     def get_stats(self) -> dict[str, Any]:
+        self._reload()
         total = len(self._projects)
         by_status: dict[str, int] = {}
         for p in self._projects:
