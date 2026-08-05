@@ -65,10 +65,10 @@
 </div>
 {% endif %}
 
-<!-- 完全复刻成片（仅 replica 模式且有 final_video 时显示） -->
-{% if is_replica and p.final_video %}
+<!-- 成片（有 final_video 时显示：完全复刻 / 风格改造均有） -->
+{% if p.final_video %}
 <div class="panel" style="border-color: var(--accent-2);">
-  <h2>完全复刻成片</h2>
+  <h2>{{ '完全复刻成片' if is_replica else '风格改造成片' }}</h2>
   <div style="display:flex; flex-direction:column; align-items:center; margin-top:10px;">
     <video src="/api/media?path={{ p.final_video | urlencode }}" controls style="max-height:720px; max-width:100%; border-radius:8px; background:#000; box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></video>
     <div style="margin-top:10px;">

@@ -132,9 +132,40 @@ def _run_quick_cut(job_id: str, project_id: str, clip_paths: list[str], title: s
         import os
         import shutil
         env = os.environ.copy()
-        ffmpeg_bin_path = r"H:\soft\ffmpeg-n7.1-latest-win64-gpl-7.1\bin"
-        env["PATH"] = ffmpeg_bin_path + os.pathsep + env.get("PATH", "")
-        ffmpeg_exe = shutil.which("ffmpeg", path=env["PATH"]) or os.path.join(ffmpeg_bin_path, "ffmpeg.exe")
+        ffmpeg_setting = settings.ffmpeg_path
+        ffmpeg_path_obj = Path(ffmpeg_setting)
+
+        ffmpeg_bin_dir = ""
+        if ffmpeg_path_obj.is_file() or ffmpeg_path_obj.name.lower().endswith(".exe"):
+            ffmpeg_bin_dir = str(ffmpeg_path_obj.parent)
+            ffmpeg_exe = str(ffmpeg_path_obj)
+        elif ffmpeg_path_obj.is_dir():
+            ffmpeg_bin_dir = str(ffmpeg_path_obj)
+            ffmpeg_exe = shutil.which("ffmpeg", path=ffmpeg_bin_dir) or "ffmpeg"
+        else:
+            ffmpeg_exe = shutil.which("ffmpeg") or "ffmpeg"
+
+        if ffmpeg_bin_dir:
+            env["PATH"] = ffmpeg_bin_dir + os.pathsep + env.get("PATH", "")
+
+        # 自动兼容跨机器搬迁后的历史素材路径
+        resolved_clip_paths = []
+        for clip in clip_paths:
+            cp = Path(clip)
+            if not cp.exists():
+                normalized = clip.replace("\\", "/")
+                if "/output/" in normalized:
+                    rel = normalized.split("/output/", 1)[1]
+                    candidate = _PROJECT_ROOT / "output" / rel
+                    if candidate.exists():
+                        cp = candidate
+                elif normalized.startswith("output/"):
+                    rel = normalized.split("output/", 1)[1]
+                    candidate = _PROJECT_ROOT / "output" / rel
+                    if candidate.exists():
+                        cp = candidate
+            resolved_clip_paths.append(str(cp))
+        clip_paths = resolved_clip_paths
 
         logger.info(f"Running video synthesis with skill={skill} for project {project_id}")
 
@@ -548,6 +579,24 @@ async def api_stats():
 @app.get("/api/media")
 async def api_media(path: str = Query(...)):
     """直接服务本地媒体文件(图片/视频)"""
-    if not path or not Path(path).exists():
+    if not path:
         return JSONResponse({"error": "File not found"}, status_code=404)
-    return FileResponse(path)
+
+    target_path = Path(path)
+    if not target_path.exists():
+        # 兼容跨机器/目录搬迁后的历史绝对路径
+        normalized = path.replace("\\", "/")
+        if "/output/" in normalized:
+            rel = normalized.split("/output/", 1)[1]
+            candidate = _PROJECT_ROOT / "output" / rel
+            if candidate.exists():
+                target_path = candidate
+        elif normalized.startswith("output/"):
+            rel = normalized.split("output/", 1)[1]
+            candidate = _PROJECT_ROOT / "output" / rel
+            if candidate.exists():
+                target_path = candidate
+
+    if not target_path.exists():
+        return JSONResponse({"error": f"File not found: {path}"}, status_code=404)
+    return FileResponse(str(target_path))
