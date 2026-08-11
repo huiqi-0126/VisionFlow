@@ -45,6 +45,34 @@ class MediaAPIClient:
             "Content-Type": "application/json",
         }
 
+    def _post_json_with_retry(self, url: str, body: dict[str, Any], *, attempts: int = 4, read_timeout: float = 60.0) -> Any:
+        """POST JSON with retry on network errors / timeouts / 5xx.
+
+        4xx responses are returned immediately so the caller can raise a precise
+        error. Transient failures (read timeout, connection reset, 5xx) are
+        retried with exponential backoff so a single slow response no longer
+        kills the whole job. If 5xx exhausts the retries the last response is
+        returned (caller raises the HTTP error); if a network error exhausts
+        them, RuntimeError is raised.
+        """
+        last_resp: Any = None
+        last_exc: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                resp = requests.post(url, headers=self._headers, json=body, timeout=(10, read_timeout))
+                if resp.ok or 400 <= resp.status_code < 500:
+                    return resp
+                last_resp = resp
+                logger.warning("POST %s HTTP %d (attempt %d/%d)", url, resp.status_code, attempt, attempts)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_exc = exc
+                logger.warning("POST %s network error (attempt %d/%d): %s", url, attempt, attempts, exc)
+            if attempt < attempts:
+                time.sleep(min(2 ** attempt, 10))
+        if last_resp is not None:
+            return last_resp
+        raise RuntimeError(f"POST {url} failed after {attempts} attempts: {last_exc}") from last_exc
+
     # ── 图片生成 ───────────────────────────────────────────
 
     def generate_image(
@@ -71,8 +99,10 @@ class MediaAPIClient:
         if pic:
             body["pic"] = pic
 
-        resp = requests.post(url, headers=self._headers, json=body, timeout=30)
-        resp.raise_for_status()
+        resp = self._post_json_with_retry(url, body)
+        if not resp.ok:
+            detail = resp.text.strip()[:1500]
+            raise RuntimeError(f"Image generation request failed (HTTP {resp.status_code}): {detail or 'empty response'}")
         data = resp.json()
 
         if "error" in data:
@@ -130,7 +160,11 @@ class MediaAPIClient:
         if pics:
             body["pics"] = pics
 
-        resp = requests.post(url, headers=self._headers, json=body, timeout=30)
+        logger.info(
+            "VIDEO GEN request | model=%s | size=%s | duration=%s | aspect=%s | pic=%s | end_pic=%s | pics=%s | prompt=%s",
+            model, size, duration, aspect_ratio, pic, end_pic, pics, prompt,
+        )
+        resp = self._post_json_with_retry(url, body)
         if not resp.ok:
             detail = resp.text.strip()[:1500]
             raise RuntimeError(f"Video generation request failed (HTTP {resp.status_code}): {detail or 'empty response'}")
@@ -158,7 +192,7 @@ class MediaAPIClient:
 
         for attempt in range(1, self.max_poll_attempts + 1):
             try:
-                resp = requests.get(url, headers=self._headers, timeout=15)
+                resp = requests.get(url, headers=self._headers, timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
             except Exception as exc:

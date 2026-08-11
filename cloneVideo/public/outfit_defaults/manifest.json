@@ -1,0 +1,69 @@
+{
+  "models": [
+    {
+      "id": "model_asian_editorial",
+      "label": "都市轻奢女模特",
+      "path": "/public/outfit_defaults/model_asian_editorial.png",
+      "prompt": "Photorealistic full-body East Asian female fashion model, 25 years old, long black center-parted hair, natural refined makeup, confident neutral expression, wearing a fitted white t-shirt, light blue high-waisted jeans, and clean white sneakers. Front-facing standing pose, arms relaxed, warm light-gray seamless fashion studio cyclorama, soft editorial lighting, vertical 9:16, full body visible, clear face and correct hands, no jewelry, no text, no logo, no watermark.",
+      "garment": ""
+    },
+    {
+      "id": "model_european_editorial",
+      "label": "极简金发女模特",
+      "path": "/public/outfit_defaults/model_european_editorial.png",
+      "prompt": "Photorealistic full-body European female fashion model, 26 years old, shoulder-length dark blonde bob, minimal makeup, calm neutral expression, wearing a ribbed beige knit top, dark tailored trousers, and minimal white sneakers. Front-facing standing pose, arms relaxed, warm light-gray seamless fashion studio cyclorama, soft editorial lighting, vertical 9:16, full body visible, clear face and correct hands, no jewelry, no text, no logo, no watermark.",
+      "garment": ""
+    }
+  ],
+  "outfits": [
+    {
+      "id": "outfit_sport_windbreaker",
+      "label": "运动百褶套装",
+      "path": "/public/outfit_defaults/outfit_sport_windbreaker.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's casual sporty outfit arranged together: a color-block outdoor windbreaker jacket and a pleated sports mini skirt. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a color-block outdoor windbreaker jacket with a pleated sports mini skirt"
+    },
+    {
+      "id": "outfit_hoodie_cargo",
+      "label": "卫衣工装套装",
+      "path": "/public/outfit_defaults/outfit_hoodie_cargo.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's casual street outfit arranged together: a loose hooded sweatshirt (hoodie) and khaki cargo pants. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a loose hooded sweatshirt with khaki cargo pants"
+    },
+    {
+      "id": "outfit_striped_denim",
+      "label": "条纹牛仔套装",
+      "path": "/public/outfit_defaults/outfit_striped_denim.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's casual summer outfit arranged together: a striped short-sleeve t-shirt and light blue denim shorts. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a striped short-sleeve t-shirt with light blue denim shorts"
+    },
+    {
+      "id": "outfit_cc46c76118",
+      "label": "衬衫阔腿套装",
+      "path": "/public/outfit_defaults/outfit_cc46c76118.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's outfit arranged together: a white oversized button-up shirt with beige wide-leg trousers. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a white oversized button-up shirt with beige wide-leg trousers"
+    },
+    {
+      "id": "outfit_54a37eba52",
+      "label": "针织半裙套装",
+      "path": "/public/outfit_defaults/outfit_54a37eba52.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's outfit arranged together: a fitted ribbed knit sweater with a satin midi slip skirt. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a fitted ribbed knit sweater with a satin midi slip skirt"
+    },
+    {
+      "id": "outfit_773838ae2d",
+      "label": "西服短裤套装",
+      "path": "/public/outfit_defaults/outfit_773838ae2d.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's outfit arranged together: a black blazer with matching tailored shorts. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a black blazer with matching tailored shorts"
+    },
+    {
+      "id": "outfit_2e5b878ed2",
+      "label": "T恤牛仔套装",
+      "path": "/public/outfit_defaults/outfit_2e5b878ed2.png",
+      "prompt": "Professional e-commerce flat-lay product photo of a complete women's outfit arranged together: a graphic crew-neck t-shirt with straight blue jeans. Pure seamless white background, clothing only, no shoes, no accessories, no mannequin, no person, no model, every garment clearly visible, realistic fabric texture, soft even studio lighting, vertical 9:16, no text, no logo, no watermark.",
+      "garment": "a graphic crew-neck t-shirt with straight blue jeans"
+    }
+  ]
+}

@@ -1,14 +1,16 @@
-"""室内装修视频复刻流水线 - 风格改造 + 运镜还原 + 合并成片
+"""室内装修视频复刻流水线 - 轻微创意变化 + 运镜还原 + 合并成片
 
-基于完全复刻(ReplicaPipeline)的逻辑重构。与完全复刻的差异:
-  - 多了「风格分析 + 逐帧风格改造」步骤
-  - 首帧是风格改造后的图(而非原始关键帧)
+基于完全复刻(ReplicaPipeline)的逻辑。与完全复刻的唯一差异:
+  - 关键帧先做「轻微创意变化」(image-edit, 保持构图风格, 只换小细节)
+  - 首帧是创意变化后的图(而非原始关键帧)
 
 流程:
-  上传视频 → 抽 N 帧 → AI 推荐统一目标风格 → VLM 理解运镜
-  → 逐帧风格改造(image-edit, 保留布局元素, 只改风格)
-  → 逐帧用改造图作首帧生成 4s 片段(运镜还原)
+  上传视频 → 抽 N 帧 → VLM 理解运镜
+  → 逐帧轻微创意变化(保留布局/风格, 只换装饰小细节)
+  → 逐帧用变化图作首帧生成 4s 片段(运镜还原)
   → ffmpeg 合并成完整视频(静音)
+
+不做风格分析/推荐, 不做帧清理(去人/字)。
 """
 
 from __future__ import annotations
@@ -33,7 +35,6 @@ from core.llm_client import LLMClient
 from core.media_api import MediaAPIClient
 from core.project_manager import ProjectManager
 from core.shot_planner import calc_num_shots
-from core.style_analyzer import StyleAnalyzer, StyleProfile
 from core.video_analyzer import VideoAnalyzer, KeyFrame, aspect_ratio_from_resolution
 from core.video_merger import VideoMerger
 
@@ -56,8 +57,41 @@ def _cap_frames(frames: list[KeyFrame], n: int) -> list[KeyFrame]:
     return out or frames[:n]
 
 
+# ── 轻微创意变化 prompt（保持构图风格, 只换小细节）──────────────────
+
+_CREATIVE_EDIT_PROMPT = (
+    "Make subtle creative changes to this photo while preserving "
+    "the overall composition, style, and layout.\n\n"
+    "RULES (must follow exactly):\n"
+    "- Keep the EXACT same room layout, camera angle, viewpoint, wall colors, "
+    "flooring, and all large furniture pieces in their original positions.\n"
+    "- Keep the SAME overall design style, color palette, and lighting mood.\n"
+    "- Change SMALL details to give a fresh look. You MAY swap or adjust any of:\n"
+    "  * throw pillows, blankets, cushions, upholstery accents\n"
+    "  * artwork, framed photos, posters, wall decorations\n"
+    "  * potted plants, flower arrangements, branches in vases\n"
+    "  * tabletop accessories: books, magazines, vases, candles, bowls, trays\n"
+    "  * rug patterns, curtain fabrics, small textile choices\n"
+    "  * clothing on visible mannequins, draped garments, or laundry\n"
+    "  * plated food, tableware, cups, cutlery on a dining or kitchen surface\n"
+    "  * fresh ingredients, fruit bowls, snacks, beverages on countertops\n"
+    "  * small lamps, pendant shades, candle holders (not main ceiling lights)\n"
+    "  * toiletries, towels, soap dispensers in bathroom scenes\n"
+    "  * children's toys, storage baskets, decorative boxes\n"
+    "  * seasonal decor: wreaths, garlands, holiday accents\n"
+    "- Do NOT change wall colors, ceiling, flooring, windows, doors, or any "
+    "built-in fixtures.\n"
+    "- Do NOT move, remove, or replace any major furniture (sofa, bed, table, "
+    "cabinets, chairs, appliances).\n"
+    "- The result must look like the SAME room, SAME style, just with different "
+    "styling accents — as if a stylist refreshed the scene.\n"
+    "- No people in the result.\n\n"
+    "Photorealistic, professional photography, natural lighting matching the original."
+)
+
+
 class CloneVideoPipeline:
-    """风格改造复刻 - 关键帧风格改造 → 运镜还原 → 合并成片"""
+    """轻微创意变化复刻 - 保持构图风格, 换小细节 → 运镜还原 → 合并成片"""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
@@ -83,7 +117,6 @@ class CloneVideoPipeline:
         )
         self.project_mgr = ProjectManager(s.data_dir, s.projects_dir)
         self.video_analyzer = VideoAnalyzer(self.llm, s.keyframe_interval, s.ffmpeg_path)
-        self.style_analyzer = StyleAnalyzer(self.llm)
         self.camera_analyzer = CameraAnalyzer(self.llm, clip_duration=s.clip_duration)
         self.video_merger = VideoMerger(ffmpeg_path=s.ffmpeg_path)
 
@@ -92,11 +125,11 @@ class CloneVideoPipeline:
         video_path: str | Path | None = None,
         resume_project_id: str | None = None,
     ) -> dict[str, Any]:
-        """执行完整的风格改造复刻流程
+        """执行完整的轻微创意变化复刻流程
 
         Args:
             video_path: 源视频路径 (新建项目时必填)
-            resume_project_id: 已有项目 ID, 提供则跳过前 4 步, 从未完成的步骤继续
+            resume_project_id: 已有项目 ID, 提供则从未完成的步骤继续
         """
         if resume_project_id:
             project = self.project_mgr.get_project(resume_project_id)
@@ -104,7 +137,7 @@ class CloneVideoPipeline:
                 raise ValueError(f"找不到项目 {resume_project_id}")
             pid = resume_project_id
             output_dir = Path(project["output_dir"])
-            console.print(f"\n[bold cyan]>> 恢复风格改造项目:[/] [yellow]{pid}[/]")
+            console.print(f"\n[bold cyan]>> 恢复创意变化项目:[/] [yellow]{pid}[/]")
             aspect_ratio = project.get("aspect_ratio") or self.settings.default_aspect_ratio
             self._phase_generate_images(pid, output_dir, aspect_ratio)
             self._phase_generate_clips(pid, output_dir, aspect_ratio)
@@ -119,7 +152,7 @@ class CloneVideoPipeline:
         if not video_path.exists():
             raise FileNotFoundError(f"视频文件不存在: {video_path}")
 
-        console.print(f"\n[bold cyan]>> 风格改造复刻:[/] [yellow]{video_path.name}[/]")
+        console.print(f"\n[bold cyan]>> 创意变化复刻:[/] [yellow]{video_path.name}[/]")
         width, height = self.video_analyzer.get_video_resolution(video_path)
         aspect_ratio = aspect_ratio_from_resolution(width, height)
         duration = self.video_analyzer.get_video_duration(video_path)
@@ -139,7 +172,6 @@ class CloneVideoPipeline:
 
         try:
             self._phase_extract(video_path, pid, output_dir, duration, num_shots)
-            self._phase_style(pid)
             self._phase_analyze_camera(pid)
             self._phase_build_plan(pid)
             self._phase_generate_images(pid, output_dir, aspect_ratio)
@@ -149,15 +181,15 @@ class CloneVideoPipeline:
             self.project_mgr.update_project(pid, status="done")
             project = self.project_mgr.get_project(pid) or {}
             console.print(
-                f"\n  [bold green]v 风格改造复刻完成![/] "
-                f"{len(project.get('images', []))} 张改造图 + "
+                f"\n  [bold green]v 创意变化复刻完成![/] "
+                f"{len(project.get('images', []))} 张变化图 + "
                 f"{len(project.get('clips', []))} 个片段 → "
                 f"{project.get('final_video', '')}"
             )
             return project
 
         except Exception as exc:
-            logger.error("风格改造流程失败: %s", exc, exc_info=True)
+            logger.error("创意变化流程失败: %s", exc, exc_info=True)
             console.print(f"  [red]x 复刻失败: {exc}[/]")
             self.project_mgr.update_project(pid, status="failed", error=str(exc))
             raise
@@ -174,7 +206,7 @@ class CloneVideoPipeline:
         duration: float,
         num_shots: int,
     ) -> None:
-        console.print(f"  [dim]Step 1/7: 均匀抽帧 (目标 {num_shots} 帧)...[/]")
+        console.print(f"  [dim]Step 1/6: 均匀抽帧 (目标 {num_shots} 帧)...[/]")
         interval = duration / num_shots if num_shots > 0 else self.settings.keyframe_interval
         frames_dir = output_dir / "frames"
         frames = self.video_analyzer.extract_keyframes(video_path, frames_dir, interval=interval)
@@ -194,29 +226,11 @@ class CloneVideoPipeline:
         )
 
     # ════════════════════════════════════════════════════════════════
-    # Step 2: AI 推荐统一目标风格
-    # ════════════════════════════════════════════════════════════════
-
-    def _phase_style(self, pid: str) -> None:
-        console.print("  [dim]Step 2/7: AI 推荐统一目标风格...[/]")
-        self.project_mgr.update_project(pid, status="style_profiled")
-        project = self.project_mgr.get_project(pid) or {}
-        frames = self._load_keyframes(project)
-
-        profile = self.style_analyzer.decide(frames)
-        self.project_mgr.update_project(pid, style_profile=profile.to_dict())
-        console.print(
-            f"  [green]v 原风格 {profile.original_style_cn} → 目标风格 "
-            f"{profile.overall_style_cn} / {profile.overall_style_en}[/]"
-        )
-        console.print(f"  [dim]目标风格锁:[/] {profile.style_descriptor_en[:160]}...")
-
-    # ════════════════════════════════════════════════════════════════
-    # Step 3: 运镜理解（从源视频还原）
+    # Step 2: 运镜理解（从源视频还原）
     # ════════════════════════════════════════════════════════════════
 
     def _phase_analyze_camera(self, pid: str) -> None:
-        console.print("  [dim]Step 3/7: 理解运镜方式 (VLM 对比相邻帧)...[/]")
+        console.print("  [dim]Step 2/6: 理解运镜方式 (VLM 对比相邻帧)...[/]")
         project = self.project_mgr.get_project(pid) or {}
         frames = self._load_keyframes(project)
 
@@ -226,33 +240,30 @@ class CloneVideoPipeline:
 
         moves = [s.camera_move for s in segments]
         console.print(f"  [green]v 运镜还原:[/] {', '.join(moves)}")
-        # 暂存到实例，供 _phase_build_plan 使用
         self._camera_segments: list[CameraSegment] = segments
 
     # ════════════════════════════════════════════════════════════════
-    # Step 4: 构建镜头清单（风格 + 运镜整合）
+    # Step 3: 构建镜头清单（轻微变化 prompt + 运镜）
     # ════════════════════════════════════════════════════════════════
 
     def _phase_build_plan(self, pid: str) -> None:
-        console.print("  [dim]Step 4/7: 构建镜头清单 (风格 + 运镜锁定)...[/]")
+        console.print("  [dim]Step 3/6: 构建镜头清单 (轻微变化 + 运镜)...[/]")
         project = self.project_mgr.get_project(pid) or {}
-        profile = self._load_profile(project)
         segments = getattr(self, "_camera_segments", [])
 
-        image_prompt = self._build_style_prompt(profile)
         shot_plan: list[dict[str, Any]] = []
         for seg in segments:
             shot_plan.append({
                 "shot_id": seg.shot_id,
-                "frame_path": seg.frame_path,            # 原始关键帧（改造基底）
+                "frame_path": seg.frame_path,            # 原始关键帧（变化基底）
                 "base_frame_path": seg.frame_path,       # 兼容旧字段
-                "clean_frame_path": seg.frame_path,      # 兼容现有模板（未做清理，指向原图）
+                "clean_frame_path": seg.frame_path,      # 兼容模板
                 "timestamp": seg.timestamp,
                 "camera_move": seg.camera_move,
                 "motion_detail_en": seg.motion_detail_en,
                 "scene_desc_cn": seg.scene_desc_cn,
-                "image_prompt": image_prompt,            # 风格改造 prompt（统一）
-                "video_prompt": self._build_video_prompt(seg, profile),
+                "image_prompt": _CREATIVE_EDIT_PROMPT,   # 固定的轻微变化 prompt
+                "video_prompt": seg.video_prompt,        # 直接用运镜 prompt（不追加风格）
                 "duration": self.settings.clip_duration,
                 "image_status": "pending",
                 "image_path": "",
@@ -261,14 +272,14 @@ class CloneVideoPipeline:
             })
 
         self.project_mgr.update_project(pid, status="planning", shot_plan=shot_plan)
-        console.print(f"  [green]v {len(shot_plan)} 个镜头 (风格 + 运镜已锁定)[/]")
+        console.print(f"  [green]v {len(shot_plan)} 个镜头 (轻微变化 + 运镜已锁定)[/]")
 
     # ════════════════════════════════════════════════════════════════
-    # Step 5: 逐帧风格改造（image-edit）
+    # Step 4: 逐帧轻微创意变化（image-edit）
     # ════════════════════════════════════════════════════════════════
 
     def _phase_generate_images(self, pid: str, output_dir: Path, aspect_ratio: str) -> None:
-        console.print("  [dim]Step 5/7: 逐帧风格改造 (保留布局, 只改风格)...[/]")
+        console.print("  [dim]Step 4/6: 逐帧轻微创意变化 (保持构图, 换小细节)...[/]")
         self.project_mgr.update_project(pid, status="generating_images")
         project = self.project_mgr.get_project(pid)
         if not project:
@@ -283,10 +294,10 @@ class CloneVideoPipeline:
             BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(), console=console,
         ) as progress:
-            task = progress.add_task("风格改造", total=len(shot_plan))
+            task = progress.add_task("创意变化", total=len(shot_plan))
             for shot in shot_plan:
                 sid = shot["shot_id"]
-                progress.update(task, description=f"改造 shot_{sid:02d}/{len(shot_plan)}")
+                progress.update(task, description=f"变化 shot_{sid:02d}/{len(shot_plan)}")
                 if shot.get("image_status") == "done" and shot.get("image_path"):
                     progress.update(task, advance=1)
                     continue
@@ -295,22 +306,22 @@ class CloneVideoPipeline:
                     shot["image_path"] = img_path
                     shot["image_status"] = "done"
                 except Exception as exc:
-                    logger.warning("shot %d 风格改造失败: %s", sid, exc)
-                    console.print(f"    [yellow]! shot_{sid:02d} 风格改造失败: {exc}[/]")
+                    logger.warning("shot %d 创意变化失败: %s", sid, exc)
+                    console.print(f"    [yellow]! shot_{sid:02d} 变化失败: {exc}[/]")
                     shot["image_status"] = "failed"
                 self.project_mgr.update_project(pid, shot_plan=shot_plan)
                 progress.update(task, advance=1)
 
         images = [s["image_path"] for s in shot_plan if s.get("image_status") == "done" and s.get("image_path")]
         self.project_mgr.update_project(pid, images=images)
-        console.print(f"  [green]v {len(images)}/{len(shot_plan)} 张改造图完成[/]")
+        console.print(f"  [green]v {len(images)}/{len(shot_plan)} 张变化图完成[/]")
 
     # ════════════════════════════════════════════════════════════════
-    # Step 6: 逐帧用改造图作首帧生成 4s 片段
+    # Step 5: 逐帧用变化图作首帧生成 4s 片段
     # ════════════════════════════════════════════════════════════════
 
     def _phase_generate_clips(self, pid: str, output_dir: Path, aspect_ratio: str) -> None:
-        console.print("  [dim]Step 6/7: 生成 4s 视频片段 (改造图首帧驱动)...[/]")
+        console.print("  [dim]Step 5/6: 生成 4s 视频片段 (变化图首帧驱动)...[/]")
         self.project_mgr.update_project(pid, status="generating_clips")
         project = self.project_mgr.get_project(pid)
         if not project:
@@ -333,7 +344,7 @@ class CloneVideoPipeline:
                     progress.update(task, advance=1)
                     continue
                 if shot.get("image_status") != "done" or not shot.get("image_path"):
-                    logger.warning("shot %d 改造图缺失, 跳过视频", sid)
+                    logger.warning("shot %d 变化图缺失, 跳过视频", sid)
                     shot["clip_status"] = "skipped"
                     progress.update(task, advance=1)
                     continue
@@ -353,11 +364,11 @@ class CloneVideoPipeline:
         console.print(f"  [green]v {len(clips)}/{len(shot_plan)} 个 4s 片段完成[/]")
 
     # ════════════════════════════════════════════════════════════════
-    # Step 7: 合并为完整视频
+    # Step 6: 合并为完整视频
     # ════════════════════════════════════════════════════════════════
 
     def _phase_merge(self, pid: str, output_dir: Path) -> None:
-        console.print("  [dim]Step 7/7: 合并为完整视频 (静音)...[/]")
+        console.print("  [dim]Step 6/6: 合并为完整视频 (静音)...[/]")
         self.project_mgr.update_project(pid, status="merging")
         project = self.project_mgr.get_project(pid)
         if not project:
@@ -395,16 +406,13 @@ class CloneVideoPipeline:
             ))
         return frames
 
-    def _load_profile(self, project: dict[str, Any]) -> StyleProfile:
-        return StyleProfile.from_dict(project.get("style_profile", {}) or {})
-
     def _generate_shot_image(
         self,
         shot: dict[str, Any],
         images_dir: Path,
         aspect_ratio: str,
     ) -> str:
-        """风格改造：pic=原始关键帧, prompt=保持布局只改风格"""
+        """轻微创意变化：pic=原始关键帧, prompt=保持构图换小细节"""
         sid = shot["shot_id"]
         prompt = shot.get("image_prompt", "")
         if not prompt:
@@ -423,8 +431,8 @@ class CloneVideoPipeline:
         except Exception as exc:
             raise RuntimeError(f"shot {sid} 基底帧上传失败: {exc}") from exc
 
-        console.print(f"    [cyan]风格改造 shot_{sid:02d}[/] | 基底: {Path(base_local).name}")
-        logger.info("风格改造 shot_%02d | prompt=\n%s", sid, prompt)
+        console.print(f"    [cyan]创意变化 shot_{sid:02d}[/] | 基底: {Path(base_local).name}")
+        logger.info("创意变化 shot_%02d", sid)
 
         api_task_id = self.media_api.generate_image(
             prompt=prompt,
@@ -435,7 +443,7 @@ class CloneVideoPipeline:
         )
         result = self.media_api.poll_image(api_task_id)
         if result.get("status") != "success" or not result.get("url"):
-            raise RuntimeError(f"风格改造失败: {result}")
+            raise RuntimeError(f"创意变化失败: {result}")
 
         img_path = images_dir / f"shot_{sid:02d}.png"
         self.media_api.download_media(result["url"], img_path)
@@ -447,7 +455,7 @@ class CloneVideoPipeline:
         clips_dir: Path,
         aspect_ratio: str,
     ) -> str:
-        """改造图作首帧生成 4s：pic=改造图, prompt=运镜+风格"""
+        """变化图作首帧生成 4s：pic=变化图, prompt=运镜"""
         sid = shot["shot_id"]
         prompt = shot.get("video_prompt", "")
         if not prompt:
@@ -455,12 +463,12 @@ class CloneVideoPipeline:
 
         img_local = shot.get("image_path", "")
         if not img_local or not Path(img_local).exists():
-            raise RuntimeError(f"shot {sid} 改造图不存在: {img_local}")
+            raise RuntimeError(f"shot {sid} 变化图不存在: {img_local}")
 
         try:
             pic_url = self.cos.upload_file(img_local)
         except Exception as exc:
-            raise RuntimeError(f"shot {sid} 改造图上传失败: {exc}") from exc
+            raise RuntimeError(f"shot {sid} 变化图上传失败: {exc}") from exc
 
         console.print(
             f"    [cyan]生成视频 shot_{sid:02d}[/] | "
@@ -484,38 +492,6 @@ class CloneVideoPipeline:
         clip_path = clips_dir / f"shot_{sid:02d}.mp4"
         self.media_api.download_media(result["url"], clip_path)
         return str(clip_path)
-
-    # ── Prompt 构建 ──────────────────────────────────────────
-
-    def _build_style_prompt(self, profile: StyleProfile) -> str:
-        """统一风格改造 prompt（保持布局家具，只改风格）"""
-        descriptor = profile.style_descriptor_en or (
-            "modern minimalist interior, warm neutral tones, natural wood, "
-            "clean lines, soft lighting"
-        )
-        return (
-            f"Transform this interior photo into the following design style: {descriptor}.\n"
-            "CRITICAL RULES (must follow exactly):\n"
-            "- Keep the EXACT same room layout, camera angle, viewpoint, furniture arrangement "
-            "and furniture pieces. Do NOT move, add, remove or replace any furniture, walls, "
-            "windows, doors or large objects.\n"
-            "- Only change the STYLE: wall colors, surface materials, finishes, flooring, "
-            "lighting mood, and small decorative accents.\n"
-            "- The composition and spatial geometry must remain identical to the input photo.\n"
-            "- No people in the result.\n"
-            "Photorealistic architectural rendering, high detail, professional interior photography."
-        )
-
-    def _build_video_prompt(self, segment: CameraSegment, profile: StyleProfile) -> str:
-        """4s 视频 prompt（运镜 + 风格），在 CameraAnalyzer 运镜 prompt 基础上追加风格"""
-        base = segment.video_prompt  # CameraAnalyzer 已生成的运镜 prompt
-        descriptor = profile.style_descriptor_en or ""
-        if not descriptor:
-            return base
-        # 避免重复追加 cinematic/photorealistic 等词
-        if "photorealistic" not in base.lower():
-            return f"{base} The space embodies this style: {descriptor}. Cinematic, photorealistic."
-        return f"{base} The space embodies this style: {descriptor}."
 
     def get_status(self) -> dict[str, Any]:
         return self.project_mgr.get_stats()

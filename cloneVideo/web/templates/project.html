@@ -26,8 +26,8 @@
   </div>
 </div>
 
-<!-- 统一目标风格决策（完全复刻模式无此步骤，跳过） -->
-{% if not is_replica %}
+<!-- 统一目标风格决策（仅在项目有 style_profile 时显示） -->
+{% if not is_replica and sp %}
 <div class="panel">
   <h2>{{ '参考图风格（锚定）' if p.mode=='image' else '统一目标风格（AI 推荐）' }}</h2>
   {% if sp %}

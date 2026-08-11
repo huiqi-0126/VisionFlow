@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}AI 换装视频 · cloneVideo{% endblock %}
+{% block content %}
+<style>
+  .field { flex: 1; min-width: 260px; }
+  .field label, .field small { display:block; }
+  .field label { margin-bottom:7px; font-weight:600; }
+  .field small { color:var(--muted); margin-top:6px; font-size:12px; }
+  .field input, .field textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:10px; font:inherit; }
+  .notice { border-left:3px solid var(--accent); padding:9px 12px; background:rgba(212,165,116,.09); color:var(--muted); font-size:13px; }
+  .preset-grid { display:flex; gap:12px; flex-wrap:wrap; } .preset-card { width:150px; padding:0; overflow:hidden; background:var(--panel-2); color:var(--text); border:2px solid var(--border); } .preset-card img { width:100%; height:180px; object-fit:cover; display:block; } .preset-card span { display:block; padding:8px; font-size:12px; } .preset-card.selected { border-color:var(--accent); }
+</style>
+<section class="panel">
+  <div style="display:grid;grid-template-columns:minmax(250px,360px) 1fr;gap:24px;align-items:start">
+    <div>
+      <video controls muted loop playsinline style="width:100%;border-radius:10px;background:#090a0d" src="/public/23.mp4"></video>
+      <p class="muted" style="font-size:13px;margin:10px 0 0">目标节奏参考：固定机位、模特稳定、快速布料甩动换装，约 12 秒竖屏成片。</p>
+    </div>
+    <div>
+      <h1 style="margin:0 0 8px">AI 模特换装</h1>
+      <p class="muted">上传模特和衣服图片，或直接填写描述。系统先用图片模型制作统一模特与各套造型，再由视频模型生成真实换装转场；最后以 23.mp4 的节奏合成。</p>
+      <div class="notice" style="margin-top:16px">建议使用 2–3 套服装。服装参考图按上传顺序对应下方第 1、2、3 行服装描述。</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="presetPanel">
+  <h2>Gemini 默认预设</h2>
+  {% if defaults.models and defaults.outfits %}
+  <p class="muted">选择一位模特和 2–3 套服装后，将直接作为换装生成的参考素材。</p>
+  <div class="preset-grid" id="modelPresets">{% for item in defaults.models %}<button type="button" class="preset-card model-preset" data-id="{{ item.id }}"><img src="{{ item.path }}"><span>{{ item.label }}</span></button>{% endfor %}</div>
+  <div class="preset-grid" id="outfitPresets" style="margin-top:14px;align-items:flex-start">
+    {% for item in defaults.outfits %}
+    <div class="preset-card-wrap" style="position:relative;width:150px">
+      <button type="button" class="preset-card outfit-preset" data-id="{{ item.id }}"><img src="{{ item.path }}"><span>{{ item.label }}</span></button>
+      <button type="button" class="preset-delete" data-id="{{ item.id }}" title="删除" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;line-height:22px;font-size:16px;padding:0">×</button>
+    </div>
+    {% endfor %}
+    <button type="button" id="addOutfitBtn" class="preset-card" title="添加套装" style="display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted);min-height:212px">+</button>
+  </div>
+  <div id="addOutfitForm" hidden style="margin-top:12px;padding:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;max-width:520px">
+    <div class="field"><label>名称</label><input id="addOutfitLabel" placeholder="如：运动百褶套装"></div>
+    <div class="field" style="margin-top:8px"><label>服装描述（上装+下装，无鞋配饰）</label><input id="addOutfitGarment" placeholder="如：a color-block windbreaker jacket with a pleated sports mini skirt"></div>
+    <div class="field" style="margin-top:8px"><label>服装图片（可选；不上传则用 Gemini 生成白底产品图）</label><input id="addOutfitImage" type="file" accept="image/png,image/jpeg,image/webp"></div>
+    <div style="margin-top:10px"><button type="button" id="addOutfitSubmit" class="btn primary">添加</button> <span id="addOutfitStatus" class="muted"></span></div>
+  </div>
+  {% else %}
+  <p class="muted">尚未生成默认素材。点击后会用当前 Gemini 图片模型生成 2 位模特和 3 套服装。</p>
+  {% endif %}
+  <div style="margin-top:14px;display:flex;align-items:center;gap:12px">
+    <button type="button" id="generateDefaults">{% if defaults.models and defaults.outfits %}重新生成服装预设{% else %}生成 Gemini 默认预设{% endif %}</button>
+    <span id="defaultStatus" class="muted"></span>
+  </div>
+</section>
+<section class="panel">
+  <h2>1. 模特设定</h2>
+  <form id="outfitForm">
+    <input type="hidden" name="default_model" id="defaultModel">
+    <input type="hidden" name="default_outfits" id="defaultOutfits">
+    <div class="field" style="max-width:420px;margin-bottom:16px">
+      <label>生成模式</label>
+      <select id="genMode" name="gen_mode" style="width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit">
+        <option value="outfit">23.mp4 换装（棚拍节奏，2–3 套）</option>
+        <option value="magic">魔法响指循环（美景背景，2–6 套，循环变换）</option>
+      </select>
+      <small id="genModeHint" class="muted">23.mp4 模式：固定机位棚拍换装。魔法响指：模特响指→背景与套装同时变换，循环成片。</small>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>模特参考图（可选）</label>
+        <input type="file" name="model_image" accept="image/png,image/jpeg,image/webp">
+        <small>清晰半身或全身正面照效果最好。留空则不传人物图，改用纯文本生成（避免视频模型识别人物图失败）。</small>
+      </div>
+      <div class="field" style="flex:2">
+        <label>模特描述（可选；不选模特、不上传图、不填即用默认网红脸）</label>
+        <input name="model_prompt" placeholder="例：25 岁东亚女性，黑色长直发，干净妆容，身材匀称，时尚杂志棚拍">
+        <small>会用于锁定脸、发型、体型、棚拍背景与镜头。全部留空 = 无模特模式（统一默认人物）。</small>
+      </div>
+    </div>
+
+    <h2 style="margin-top:24px">2. 服装设定</h2>
+    <div class="row">
+      <div class="field">
+        <label>服装参考图（可选，最多 6 张）</label>
+        <input type="file" name="outfit_images" multiple accept="image/png,image/jpeg,image/webp">
+        <small>图片顺序需与服装描述逐行一致。</small>
+      </div>
+      <div class="field" style="flex:2">
+        <label>服装描述（可选，2–6 行，一行一套；23.mp4 模式限 2–3 套）</label>
+        <textarea name="outfit_prompts" rows="5" placeholder="米白色短款西装外套、同色阔腿裤、金色耳饰
+红色丝绸吊带礼服、高跟鞋、简约项链
+黑色皮衣、深色短裙、长靴"></textarea>
+        <small>每套包含上装、下装/裙装、鞋履和配饰效果更稳。若已上传服装参考图，可留空——将以图片为准。</small>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;margin-top:22px">
+      <button id="submitButton" type="submit" class="btn primary">生成换装视频</button>
+      <span class="muted">将调用图片模型和视频模型，耗时取决于模型队列。</span>
+    </div>
+  </form>
+</section>
+
+<section id="jobPanel" class="panel" hidden>
+  <h2>生成进度</h2>
+  <p id="jobStatus" class="muted">准备提交任务…</p>
+  <div id="jobResult"></div>
+</section>
+
+<section class="panel" id="historyPanel">
+  <h2>历史记录</h2>
+  <p class="muted" id="historyStatus">加载中…</p>
+  <div class="preset-grid" id="historyGrid"></div>
+  <div id="historyPlayer" style="margin-top:16px"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById('outfitForm');
+  const submit = document.getElementById('submitButton');
+  const defaultButton = document.getElementById('generateDefaults');
+  const defaultStatus = document.getElementById('defaultStatus');
+  const modelInput = document.getElementById('defaultModel');
+  const outfitsInput = document.getElementById('defaultOutfits');
+  const jobPanel = document.getElementById('jobPanel');
+  const jobStatus = document.getElementById('jobStatus');
+  const jobResult = document.getElementById('jobResult');
+  let selectedOutfits = [];
+  let poller = null;
+  let outfitSuggestions = [];
+
+  async function pollOnce(id, onDone, onStage) {
+    const data = await (await fetch('/api/jobs/' + id)).json();
+    if (data.status === 'done') { clearInterval(poller); onDone(data); return null; }
+    if (data.status === 'failed') { clearInterval(poller); throw new Error(data.error || '生成失败'); }
+    if (onStage) onStage(data);
+    return data;
+  }
+
+  document.querySelectorAll('.model-preset').forEach(card => card.addEventListener('click', () => {
+    document.querySelectorAll('.model-preset').forEach(item => item.classList.remove('selected'));
+    card.classList.add('selected'); modelInput.value = card.dataset.id;
+  }));
+  document.querySelectorAll('.outfit-preset').forEach(card => card.addEventListener('click', () => {
+    const id = card.dataset.id;
+    if (selectedOutfits.includes(id)) { selectedOutfits = selectedOutfits.filter(value => value !== id); card.classList.remove('selected'); }
+    else if (selectedOutfits.length < 6) { selectedOutfits.push(id); card.classList.add('selected'); }
+    outfitsInput.value = selectedOutfits.join(',');
+  }));
+  if (defaultButton) defaultButton.addEventListener('click', async () => {
+    defaultButton.disabled = true; defaultStatus.textContent = 'Gemini 正在生成服装预设（模特保留不变）…';
+    try {
+      const data = await (await fetch('/api/outfit-switch/generate-defaults', {method:'POST'})).json();
+      poller = setInterval(async () => { try { await pollOnce(data.job_id, () => location.reload(), state => { defaultStatus.textContent = state.stage || '生成中…'; }); } catch (error) { defaultStatus.textContent = error.message; defaultButton.disabled = false; } }, 3000);
+    } catch (error) { defaultStatus.textContent = error.message; defaultButton.disabled = false; }
+  });
+
+  // Delete an outfit preset (× on each card).
+  document.querySelectorAll('.preset-delete').forEach(btn => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm('删除这套服装预设？')) return;
+    try {
+      const resp = await fetch('/api/outfit-switch/outfits/' + encodeURIComponent(btn.dataset.id), {method: 'DELETE'});
+      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || '删除失败'); }
+      location.reload();
+    } catch (err) { alert(err.message); }
+  }));
+  // Add an outfit preset (+ card → form → background job → reload).
+  const addOutfitBtn = document.getElementById('addOutfitBtn');
+  const addOutfitForm = document.getElementById('addOutfitForm');
+  const addOutfitSubmit = document.getElementById('addOutfitSubmit');
+  const addOutfitStatus = document.getElementById('addOutfitStatus');
+  if (addOutfitBtn) addOutfitBtn.addEventListener('click', async () => {
+    // Auto-pick the next common outfit suggestion the user doesn't already have,
+    // so they don't have to type a detailed description.
+    try {
+      if (!outfitSuggestions.length) {
+        outfitSuggestions = await (await fetch('/api/outfit-switch/outfit-suggestions')).json();
+      }
+      const used = new Set(Array.from(document.querySelectorAll('.outfit-preset span')).map(s => s.textContent.trim()));
+      const pick = (outfitSuggestions || []).find(s => !used.has(s.label)) || (outfitSuggestions || [])[0];
+      if (pick) {
+        document.getElementById('addOutfitLabel').value = pick.label;
+        document.getElementById('addOutfitGarment').value = pick.garment;
+      }
+      addOutfitStatus.textContent = pick ? '已预填：' + pick.label + '，点「添加」即可' : '';
+    } catch (e) { addOutfitStatus.textContent = ''; }
+    addOutfitForm.hidden = false;
+  });
+  if (addOutfitSubmit) addOutfitSubmit.addEventListener('click', async () => {
+    const label = document.getElementById('addOutfitLabel').value.trim();
+    const garment = document.getElementById('addOutfitGarment').value.trim();
+    if (!label || !garment) { addOutfitStatus.textContent = '请填写名称和服装描述'; return; }
+    const fd = new FormData();
+    fd.append('label', label); fd.append('garment', garment);
+    const img = document.getElementById('addOutfitImage').files[0];
+    if (img) fd.append('image', img);
+    addOutfitSubmit.disabled = true; addOutfitStatus.textContent = '提交中…';
+    try {
+      const resp = await fetch('/api/outfit-switch/outfits', {method: 'POST', body: fd});
+      const data = await resp.json(); if (!resp.ok) throw new Error(data.error || '提交失败');
+      poller = setInterval(async () => {
+        try { await pollOnce(data.job_id, () => location.reload(), s => { addOutfitStatus.textContent = s.stage || '生成中…'; }); }
+        catch (err) { addOutfitStatus.textContent = '失败：' + err.message; addOutfitSubmit.disabled = false; }
+      }, 3000);
+    } catch (err) { addOutfitStatus.textContent = '失败：' + err.message; addOutfitSubmit.disabled = false; }
+  });
+
+  function playerWithRefs(videoUrl, refs, extraLinksHtml) {
+    // Video on the left, reference images used by each segment stacked on the
+    // right, so you can compare the result against its inputs when it looks off.
+    const refCards = (refs || []).filter(r => r && r.path).map(r =>
+      '<figure style="margin:0;display:flex;flex-direction:column;gap:4px">' +
+      '<img src="/api/media?path=' + encodeURIComponent(r.path) + '" loading="lazy" style="width:130px;height:auto;border-radius:6px;border:1px solid var(--border)">' +
+      '<figcaption class="muted" style="font-size:11px">' + (r.label || '') + '</figcaption></figure>'
+    ).join('');
+    return '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">' +
+      '<video controls autoplay loop playsinline style="width:100%;max-width:380px;border-radius:10px;background:#090a0d" src="' + videoUrl + '"></video>' +
+      (refCards ? '<div style="display:flex;flex-direction:column;gap:10px;min-width:140px"><div class="muted" style="font-size:12px">参考图（对照诊断）</div>' + refCards + '</div>' : '') +
+      '</div>' +
+      '<p class="muted" style="margin-top:10px"><a href="' + videoUrl + '" target="_blank" rel="noopener">在新标签打开成片</a>' + (extraLinksHtml ? ' · ' + extraLinksHtml : '') + '</p>';
+  }
+
+  function showResultVideo(job) {
+    jobPanel.hidden = false;
+    jobStatus.textContent = job.stage || 'Done';
+    const videoUrl = '/api/media?path=' + encodeURIComponent(job.output_path);
+    const result = job.result || {};
+    const refs = [];
+    if (result.anchor) refs.push({label: '模特锚图(默认衣)', path: result.anchor});
+    (result.looks || []).forEach((lk, i) => { if (lk && lk.path) refs.push({label: '第' + (i+1) + '套参考图', path: lk.path}); });
+    const files = [['Manifest', job.manifest_path], ['Events', job.event_log_path]].filter(item => item[1]);
+    const links = files.map(item => '<a href="/api/media?path=' + encodeURIComponent(item[1]) + '" target="_blank" rel="noopener">' + item[0] + '</a>').join(' · ');
+    jobResult.innerHTML = playerWithRefs(videoUrl, refs, links);
+  }
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const mode = document.getElementById('genMode').value;
+    const maxOutfits = mode === 'magic' ? 6 : 3;
+    const textLines = form.outfit_prompts.value.split(/\r?\n/).filter(Boolean).length;
+    const imageCount = form.outfit_images.files.length;
+    const selectedCount = outfitsInput.value ? outfitsInput.value.split(',').filter(Boolean).length : 0;
+    const outfitCount = selectedCount || (textLines > 0 ? textLines : imageCount);
+    if (outfitCount < 2 || outfitCount > maxOutfits) {
+      alert(mode === 'magic' ? '请选择/填写/上传 2–6 套服装。' : '请选择 2–3 套服装预设，或填写 2–3 行描述，或上传 2–3 张图片。');
+      return;
+    }
+    const endpoint = mode === 'magic' ? '/api/outfit-switch/magic-snap' : '/api/outfit-switch';
+    submit.disabled = true;
+    jobPanel.hidden = false;
+    jobStatus.textContent = '提交任务中…';
+    jobResult.innerHTML = '';
+    try {
+      const response = await fetch(endpoint, {method:'POST', body:new FormData(form)});
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || '提交失败');
+      poller = setInterval(async () => {
+        try {
+          await pollOnce(data.job_id, finished => { submit.disabled = false; showResultVideo(finished); }, state => { jobStatus.textContent = state.stage || '生成中…'; });
+        } catch (error) { jobStatus.textContent = '失败：' + error.message; submit.disabled = false; }
+      }, 3000);
+    } catch (error) { jobStatus.textContent = '失败：' + error.message; submit.disabled = false; }
+  });
+
+  async function loadHistory() {
+    const status = document.getElementById('historyStatus');
+    const grid = document.getElementById('historyGrid');
+    const player = document.getElementById('historyPlayer');
+    try {
+      const rows = await (await fetch('/api/outfit-switch/history')).json();
+      if (!Array.isArray(rows) || !rows.length) { status.textContent = '暂无历史记录。'; return; }
+      status.textContent = '共 ' + rows.length + ' 条记录，点击缩略图播放成片：';
+      grid.innerHTML = rows.map((r, idx) => {
+        const date = new Date((r.created || 0) * 1000).toLocaleString();
+        const thumbUrl = r.thumb ? ('/api/media?path=' + encodeURIComponent(r.thumb)) : '';
+        const videoUrl = '/api/media?path=' + encodeURIComponent(r.video);
+        return '<button type="button" class="preset-card history-card" data-idx="' + idx + '" data-video="' + videoUrl + '">' +
+          (thumbUrl ? '<img src="' + thumbUrl + '" loading="lazy">' : '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--muted)">无预览</div>') +
+          '<span>' + date + '<br>· ' + r.outfits + ' 套服装</span></button>';
+      }).join('');
+      grid.querySelectorAll('.history-card').forEach(card => card.addEventListener('click', () => {
+        const rec = rows[parseInt(card.dataset.idx, 10)] || {};
+        const url = card.dataset.video;
+        player.innerHTML = playerWithRefs(url, rec.refs, '');
+        player.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }));
+    } catch (error) { status.textContent = '加载失败：' + error.message; }
+  }
+  loadHistory();
+})();
+</script>
+{% endblock %}
