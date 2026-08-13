@@ -166,7 +166,7 @@ class ReferenceVideoOutfitPipeline:
         h264 = output_path.with_name(output_path.stem + "_h264.mp4")
         subprocess.run(
             [self.ffmpeg, "-y", "-i", str(output_path), "-c:v", "libx264", "-pix_fmt", "yuv420p",
-             "-movflags", "+faststart", "-an", str(h264)],
+             "-r", "30", "-t", "15", "-movflags", "+faststart", "-an", str(h264)],
             check=True, capture_output=True, text=True,
         )
         return str(h264), any_face

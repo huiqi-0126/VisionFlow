@@ -13,14 +13,28 @@
   <p class="muted">上传一段参考视频（必填）+ 可选 2 张参考图 + 提示词，系统会先遮挡视频中的人脸与赤露部位，再复用参考视频的全部动作、背景与场景生成新视频。</p>
   <form id="refMotionForm">
     <div class="field" style="max-width:420px;margin-bottom:14px">
-      <label>遮挡方式（打码）</label>
+      <label>视频模型</label>
+      <select name="model" id="modelSelect" style="width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit">
+        <option value="minimax-h3" selected>Minimax H3</option>
+      </select>
+      <small>加载中…选择生成视频使用的模型。</small>
+    </div>
+    <div class="field" style="max-width:420px;margin-bottom:14px">
+      <label>遮挡方式（打码力度）</label>
       <select name="mask_mode" id="maskMode" style="width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit">
-        <option value="blur" selected>模糊（推荐，平滑无黑块）</option>
-        <option value="mosaic">马赛克方块</option>
-        <option value="fill">区域均值填充</option>
+        <option value="light" selected>轻度模糊（推荐，最易被补全还原）</option>
+        <option value="medium">中度模糊</option>
+        <option value="heavy">重度模糊</option>
         <option value="none">不遮挡</option>
       </select>
-      <small>用于遮挡参考视频中的人脸与赤露部位，避免被判敏感；可自选方式。</small>
+      <small>力度越小，模型越容易把遮挡处补全成清晰人脸；力度越大遮挡越彻底但成片越可能残留模糊。</small>
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+        <input type="checkbox" name="mask_skin" value="true" style="width:auto">
+        同时遮挡肤色部位（赤露身体）
+      </label>
+      <small>默认关闭：肤色检测可能误伤米白墙、木色沙发、食物等暖色物体。仅当视频确有赤露身体时才勾选。</small>
     </div>
     <div class="row">
       <div class="field">
@@ -61,6 +75,25 @@
   const jobStatus = document.getElementById('jobStatus');
   const jobResult = document.getElementById('jobResult');
   let poller = null;
+
+  // Populate the video model dropdown from /api/video-models.
+  async function loadModels() {
+    const sel = document.getElementById('modelSelect');
+    const hint = sel.parentElement.querySelector('small');
+    try {
+      const models = await (await fetch('/api/video-models')).json();
+      if (!Array.isArray(models) || !models.length) return;
+      const current = sel.value;
+      sel.innerHTML = models.map(m =>
+        '<option value="' + m.id + '"' + (m.id === current ? ' selected' : '') + '>' +
+        (m.displayName || m.id) + '</option>'
+      ).join('');
+      if (hint) hint.textContent = '已加载 ' + models.length + ' 个视频模型。';
+    } catch (e) {
+      if (hint) hint.textContent = '模型列表加载失败，使用默认 Minimax H3。';
+    }
+  }
+  loadModels();
 
   async function pollOnce(id, onDone, onStage) {
     const data = await (await fetch('/api/jobs/' + id)).json();

@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from fastapi import FastAPI, Query, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -519,12 +521,71 @@ def _run_reference_video_outfit(job_id: str, job_dir: Path, model_image: Path | 
         with _jobs_lock: _jobs[job_id].update({"status":"failed","stage":"生成失败","error":str(exc)})
 
 
-def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: list[Path], prompt: str, mask_mode: str = "blur") -> None:
+_VIDEO_MODELS_CACHE: list[dict[str, Any]] | None = None
+
+_FALLBACK_VIDEO_MODELS = [
+    {"id": "v6", "displayName": "PixVerse V6", "qualities": ["360p", "540p", "720p", "1080p"], "durations": list(range(1, 16))},
+    {"id": "v5.6", "displayName": "PixVerse V5.6", "qualities": ["360p", "540p", "720p", "1080p"], "durations": list(range(1, 9))},
+    {"id": "veo-3.1-standard", "displayName": "veo-3.1-standard", "qualities": ["720p", "1080p", "2160p"], "durations": [4, 6, 8]},
+    {"id": "grok-imagine", "displayName": "grok-imagine", "qualities": ["480p", "720p"], "durations": list(range(1, 16))},
+    {"id": "sora-2-pro", "displayName": "sora-2-pro", "qualities": ["720p", "1080p"], "durations": [4, 8, 12]},
+    {"id": "seedance-2.0-standard", "displayName": "Seedance 2.0 standard", "qualities": ["480p", "720p", "1080p", "2160p"], "durations": list(range(4, 16))},
+    {"id": "seedance-2.0-fast", "displayName": "Seedance 2.0 fast", "qualities": ["480p", "720p"], "durations": list(range(4, 16))},
+    {"id": "pixverse-c1", "displayName": "PixVerse C1", "qualities": ["360p", "540p", "720p", "1080p"], "durations": list(range(1, 16))},
+    {"id": "seedance-2.0-mini", "displayName": "Seedance 2.0-Mini", "qualities": ["480p", "720p"], "durations": list(range(4, 16))},
+    {"id": "minimax-h3", "displayName": "Minimax H3", "qualities": ["768p", "1440p"], "durations": list(range(5, 16))},
+    {"id": "kling-3.0-standard", "displayName": "Kling 3.0 Standard", "qualities": ["720p"], "durations": list(range(3, 16))},
+    {"id": "kling-3.0-pro", "displayName": "Kling 3.0 Pro", "qualities": ["720p"], "durations": list(range(3, 16))},
+    {"id": "happyhorse-1.0", "displayName": "Happy Horse 1.0", "qualities": ["720p", "1080p"], "durations": list(range(3, 16))},
+    {"id": "seedance-2.5", "displayName": "Seedance 2.5", "qualities": ["480p", "720p"], "durations": list(range(4, 31))},
+    {"id": "kling-o3-standard", "displayName": "Kling O3 Standard", "qualities": ["720p"], "durations": list(range(3, 16))},
+    {"id": "kling-o3-pro", "displayName": "Kling O3 Pro", "qualities": ["720p"], "durations": list(range(3, 16))},
+]
+
+
+def _get_video_models() -> list[dict[str, Any]]:
+    """Fetch the video model list from gkapi (cached), fallback to a known list."""
+    global _VIDEO_MODELS_CACHE
+    if _VIDEO_MODELS_CACHE is not None:
+        return _VIDEO_MODELS_CACHE
+    try:
+        url = settings.gkapi_baseurl.rstrip("/") + "/v1/models"
+        resp = requests.get(url, headers={"Authorization": f"Bearer {settings.gkapi_key}"}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        models = [
+            {"id": m.get("id"), "displayName": m.get("displayName") or m.get("id"),
+             "qualities": m.get("qualities") or [], "durations": m.get("durations") or []}
+            for m in data.get("data", []) if m.get("taskType") == "video"
+        ]
+        if models:
+            _VIDEO_MODELS_CACHE = models
+            return models
+    except Exception as exc:
+        logger.warning("获取视频模型列表失败，使用兜底列表: %s", exc)
+    _VIDEO_MODELS_CACHE = _FALLBACK_VIDEO_MODELS
+    return _VIDEO_MODELS_CACHE
+
+
+def _pick_video_size(qualities: list[str]) -> str:
+    for pref in ("720p", "768p", "1080p"):
+        if pref in qualities:
+            return pref
+    return qualities[0] if qualities else "768p"
+
+
+@app.get("/api/video-models")
+async def api_video_models():
+    """List video models (id, displayName, qualities, durations) for the dropdown."""
+    return _get_video_models()
+
+
+def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: list[Path], prompt: str, mask_mode: str = "light", mask_skin: bool = False, model: str = "minimax-h3", size: str = "768p", durations: list[int] | None = None) -> None:
     """Run the standalone reference-motion (参数视频) workflow in the background."""
     try:
         def report(stage: str) -> None:
             with _jobs_lock: _jobs[job_id]["stage"] = stage
-        result = ReferenceMotionPipeline(settings).run(job_dir, ref_video, images, prompt, report, mask_mode=mask_mode)
+        result = ReferenceMotionPipeline(settings).run(job_dir, ref_video, images, prompt, report, mask_mode=mask_mode, mask_skin=mask_skin, model=model, size=size, durations=durations)
         with _jobs_lock:
             _jobs[job_id].update({
                 "status": "done", "stage": "成片已生成",
@@ -541,14 +602,16 @@ def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: l
 @app.post("/api/reference-motion")
 async def api_reference_motion(
     prompt: str = Form(""),
-    mask_mode: str = Form("blur"),
+    mask_mode: str = Form("light"),
+    mask_skin: bool = Form(False),
+    model: str = Form("minimax-h3"),
     video: UploadFile = File(...),
     image1: UploadFile | None = File(None),
     image2: UploadFile | None = File(None),
 ):
     """参考视频驱动生成：上传参考视频(必填) + 可选2张图 + 提示词 → 复用动作生成视频。"""
-    if mask_mode not in {"none", "blur", "mosaic", "fill"}:
-        mask_mode = "blur"
+    if mask_mode not in {"none", "light", "medium", "heavy"}:
+        mask_mode = "light"
     if not video or not video.filename:
         return JSONResponse({"error": "请上传参考视频"}, status_code=400)
     video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
@@ -556,6 +619,12 @@ async def api_reference_motion(
     if vsuffix not in video_exts:
         return JSONResponse({"error": "参考视频仅支持 MP4/MOV/AVI/MKV/WEBM"}, status_code=400)
     image_exts = {".jpg", ".jpeg", ".png", ".webp"}
+
+    # Resolve size + duration window for the selected video model.
+    models = _get_video_models()
+    spec = next((m for m in models if m.get("id") == model), None)
+    size = _pick_video_size(spec["qualities"]) if spec else "768p"
+    durations = spec.get("durations") or [] if spec else []
 
     job_id = uuid.uuid4().hex[:12]
     job_dir = _PROJECT_ROOT / "output" / "reference_motions" / job_id
@@ -577,7 +646,7 @@ async def api_reference_motion(
 
     with _jobs_lock:
         _jobs[job_id] = {"id": job_id, "type": "reference_motion", "status": "running", "stage": "分析参考视频并遮挡敏感区域", "output_dir": str(job_dir)}
-    threading.Thread(target=_run_reference_motion, args=(job_id, job_dir, ref_path, images, prompt.strip(), mask_mode), daemon=True).start()
+    threading.Thread(target=_run_reference_motion, args=(job_id, job_dir, ref_path, images, prompt.strip(), mask_mode, mask_skin, model, size, durations), daemon=True).start()
     return {"job_id": job_id, "status": "started"}
 
 
