@@ -39,7 +39,8 @@ class Settings:
     # 尺寸跟随源视频: aspect_ratio 在 pipeline 运行时根据源视频分辨率动态设置
     default_video_model: str = "seedance-2.0-fast"
     default_image_model: str = "gemini-3.0"
-    default_size: str = "720p"
+    default_size: str = "720p"             # 视频分辨率档（seedance-2.0-fast: 480p/720p）
+    default_image_size: str = "1080p"      # 图片分辨率档（gemini-3.x: 512p/1080p/1440p/2160p）
     default_duration: str = "4"            # 室内素材固定 4 秒
     default_aspect_ratio: str = "16:9"     # 兜底，运行时会被源视频实际比例覆盖
 
@@ -83,6 +84,7 @@ class Settings:
 
         self.default_video_model = os.getenv("MODEL", "seedance-2.0-fast")
         self.default_image_model = os.getenv("IMAGE_MODEL", "gemini-3.0")
+        self.default_image_size = os.getenv("IMAGE_SIZE", "1080p")
         self.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
 
         self.data_dir = self.project_root / "data"

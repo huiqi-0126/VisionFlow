@@ -28,6 +28,7 @@ from workflow.image_pipeline import ImageClonePipeline
 from workflow.replica_pipeline import ReplicaPipeline
 from workflow.outfit_switch_pipeline import OutfitSwitchPipeline
 from workflow.magic_snap_pipeline import MagicSnapPipeline
+from workflow.reference_video_outfit_pipeline import ReferenceVideoOutfitPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -505,6 +506,17 @@ def _run_magic_snap(
         with _jobs_lock:
             _jobs[job_id].update({"status": "failed", "stage": "生成失败", "error": str(exc)})
 
+def _run_reference_video_outfit(job_id: str, job_dir: Path, model_image: Path | None, model_prompt: str, outfits: list[str]) -> None:
+    try:
+        def report(stage: str) -> None:
+            with _jobs_lock: _jobs[job_id]["stage"] = stage
+        result = ReferenceVideoOutfitPipeline(settings).run(job_dir, model_image, model_prompt, outfits, report)
+        with _jobs_lock:
+            _jobs[job_id].update({"status":"done","stage":"成片已生成","output_path":result["final_video"],"manifest_path":str(job_dir/"manifest.json"),"result":result})
+    except Exception as exc:
+        logger.exception("Reference-video outfit job %s failed",job_id)
+        with _jobs_lock: _jobs[job_id].update({"status":"failed","stage":"生成失败","error":str(exc)})
+
 @app.get("/", response_class=HTMLResponse)
 async def page_index(request: Request):
     projects = project_mgr.list_projects()
@@ -773,6 +785,38 @@ async def api_magic_snap(
         args=(job_id, job_dir, saved_model, model_prompt.strip(), saved_outfits, prompt_list),
         daemon=True,
     ).start()
+    return {"job_id": job_id, "status": "started"}
+
+@app.post("/api/outfit-switch/reference-video")
+async def api_reference_video_outfit(
+    model_prompt: str = Form(""), outfit_prompts: str = Form(""),
+    default_model: str = Form(""), default_outfits: str = Form(""),
+    model_image: UploadFile | None = File(None),
+):
+    # Parse preset selections (the form sends default_outfits; the textarea may be empty).
+    defaults = _load_outfit_defaults()
+    model_items = {item["id"]: item for item in defaults.get("models", [])}
+    outfit_items = {item["id"]: item for item in defaults.get("outfits", [])}
+    selected_model = model_items.get(default_model)
+    selected_ids = [v for v in default_outfits.split(",") if v]
+    selected = [outfit_items[v] for v in selected_ids if v in outfit_items]
+    if selected_ids and len(selected) != len(selected_ids):
+        return JSONResponse({"error": "默认服装预设无效，请刷新页面后重试"}, status_code=400)
+    if selected:
+        outfit_prompts = "\n".join((it.get("garment") or it.get("prompt", "")) for it in selected)
+    if selected_model:
+        model_prompt = selected_model["prompt"]
+    outfits = [line.strip() for line in outfit_prompts.splitlines() if line.strip()]
+    if not 2 <= len(outfits) <= 6:
+        return JSONResponse({"error": "参考视频换装模式支持 2–6 套服装"}, status_code=400)
+    job_id = uuid.uuid4().hex[:12]; job_dir = _PROJECT_ROOT / "output" / "reference_video_outfits" / job_id; job_dir.mkdir(parents=True, exist_ok=True)
+    saved: Path | None = None
+    if model_image and model_image.filename:
+        suffix = Path(model_image.filename).suffix.lower()
+        if suffix not in {".jpg", ".jpeg", ".png", ".webp"}: return JSONResponse({"error": "模特图仅支持 JPG、PNG、WEBP"}, status_code=400)
+        saved = job_dir / f"model{suffix}"; saved.write_bytes(await model_image.read())
+    with _jobs_lock: _jobs[job_id] = {"id": job_id, "type": "reference_video_outfit", "status": "running", "stage": "准备 28.mp4 参考视频（将做人脸遮挡）", "output_dir": str(job_dir)}
+    threading.Thread(target=_run_reference_video_outfit, args=(job_id, job_dir, saved, model_prompt.strip(), outfits), daemon=True).start()
     return {"job_id": job_id, "status": "started"}
 
 @app.get("/project/{project_id}", response_class=HTMLResponse)

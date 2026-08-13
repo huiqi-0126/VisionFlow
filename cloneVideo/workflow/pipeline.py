@@ -437,7 +437,7 @@ class CloneVideoPipeline:
         api_task_id = self.media_api.generate_image(
             prompt=prompt,
             model=self.settings.default_image_model,
-            size=self.settings.default_size,
+            size=self.settings.default_image_size,
             aspect_ratio=aspect_ratio,
             pic=base_url,
         )

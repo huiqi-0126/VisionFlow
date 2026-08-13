@@ -87,6 +87,9 @@ class MediaAPIClient:
 
         Args:
             pic: 参考图公网 URL（风格保持）。gemini-3.0 (Nano Banana) 会据此保持风格。
+            size: 分辨率档（模型合法值，如 gemini-3.x 的 512p/1080p/1440p/2160p）。
+                注意：接口内部把 size 当作 quality 校验，非法档位会返回
+                code 30012 "quality 参数无效"。
         """
         url = f"{self.base_url}/v1/images/generations"
         body: dict[str, Any] = {
@@ -133,6 +136,7 @@ class MediaAPIClient:
         end_pic: str | None = None,
         pics: list[str] | None = None,
         video_type: str = "0",
+        video: str | None = None,
     ) -> str:
         """提交视频生成任务，返回 task_id
 
@@ -159,6 +163,8 @@ class MediaAPIClient:
             body["videoType"] = video_type
         if pics:
             body["pics"] = pics
+        if video:
+            body["video"] = video
 
         logger.info(
             "VIDEO GEN request | model=%s | size=%s | duration=%s | aspect=%s | pic=%s | end_pic=%s | pics=%s | prompt=%s",

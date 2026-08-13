@@ -110,7 +110,7 @@ class MagicSnapPipeline:
         reference = self.cos.upload_file(model_image) if model_image else None
         text = ("Medium half-body (waist-up) portrait of one fashion model, front-facing, centered in the frame, clean simple studio background as an identity reference. "
                 + (model_prompt or ""))
-        task = self.media.generate_image(text, model=self.image_model, size=self.settings.default_size, aspect_ratio="9:16", pic=reference)
+        task = self.media.generate_image(text, model=self.image_model, size=self.settings.default_image_size, aspect_ratio="9:16", pic=reference)
         result = self.media.poll_image(task)
         if result.get("status") != "success" or not result.get("url"):
             raise RuntimeError(f"Anchor failed: {result}")
@@ -123,7 +123,7 @@ class MagicSnapPipeline:
                 "Behind her is a beautiful outdoor location: " + background + ". She wears: " + outfit + ". "
                 "Photorealistic, natural lighting. The model stays centered and upright with the same pose; the scenic background fills the area behind her. "
                 "No text, no logo, no other people.")
-        task = self.media.generate_image(text, model=self.image_model, size=self.settings.default_size, aspect_ratio="9:16", pic=anchor_url)
+        task = self.media.generate_image(text, model=self.image_model, size=self.settings.default_image_size, aspect_ratio="9:16", pic=anchor_url)
         result = self.media.poll_image(task)
         if result.get("status") != "success" or not result.get("url"):
             raise RuntimeError(f"Scene {number} failed: {result}")
