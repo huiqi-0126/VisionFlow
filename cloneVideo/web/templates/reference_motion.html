@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}参考视频驱动 · cloneVideo{% endblock %}
+{% block content %}
+<style>
+  .field { flex: 1; min-width: 260px; }
+  .field label, .field small { display:block; }
+  .field label { margin-bottom:7px; font-weight:600; }
+  .field small { color:var(--muted); margin-top:6px; font-size:12px; }
+  .field input, .field textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:10px; font:inherit; }
+</style>
+<section class="panel">
+  <h2>参考视频驱动生成（参数视频）</h2>
+  <p class="muted">上传一段参考视频（必填）+ 可选 2 张参考图 + 提示词，系统会先遮挡视频中的人脸与赤露部位，再复用参考视频的全部动作、背景与场景生成新视频。</p>
+  <form id="refMotionForm">
+    <div class="field" style="max-width:420px;margin-bottom:14px">
+      <label>遮挡方式（打码）</label>
+      <select name="mask_mode" id="maskMode" style="width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit">
+        <option value="blur" selected>模糊（推荐，平滑无黑块）</option>
+        <option value="mosaic">马赛克方块</option>
+        <option value="fill">区域均值填充</option>
+        <option value="none">不遮挡</option>
+      </select>
+      <small>用于遮挡参考视频中的人脸与赤露部位，避免被判敏感；可自选方式。</small>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>参考视频（必填）</label>
+        <input type="file" name="video" accept="video/mp4,video/mov,video/avi,video/mkv,video/webm">
+        <small>会先自动遮挡人脸与赤露区域，避免被判敏感。</small>
+      </div>
+      <div class="field">
+        <label>参考图 1（可选）</label>
+        <input type="file" name="image1" accept="image/png,image/jpeg,image/webp">
+      </div>
+      <div class="field">
+        <label>参考图 2（可选）</label>
+        <input type="file" name="image2" accept="image/png,image/jpeg,image/webp">
+      </div>
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label>提示词（描述要生成的内容 / 参考视频动作流程说明）</label>
+      <textarea name="prompt" rows="3" placeholder="例：人物在雪山前转身并微笑，动作、背景与参考视频一致"></textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:16px">
+      <button id="refMotionSubmit" type="submit" class="btn primary">生成视频</button>
+      <span id="refMotionStatus" class="muted"></span>
+    </div>
+  </form>
+</section>
+
+<section id="jobPanel" class="panel" hidden>
+  <h2>生成进度</h2>
+  <p id="jobStatus" class="muted">准备提交任务…</p>
+  <div id="jobResult"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const jobPanel = document.getElementById('jobPanel');
+  const jobStatus = document.getElementById('jobStatus');
+  const jobResult = document.getElementById('jobResult');
+  let poller = null;
+
+  async function pollOnce(id, onDone, onStage) {
+    const data = await (await fetch('/api/jobs/' + id)).json();
+    if (data.status === 'done') { clearInterval(poller); onDone(data); return null; }
+    if (data.status === 'failed') { clearInterval(poller); throw new Error(data.error || '生成失败'); }
+    if (onStage) onStage(data);
+    return data;
+  }
+
+  function playerWithRefs(videoUrl, refs, extraLinksHtml) {
+    const refCards = (refs || []).filter(r => r && r.path).map(r =>
+      '<figure style="margin:0;display:flex;flex-direction:column;gap:4px">' +
+      '<img src="/api/media?path=' + encodeURIComponent(r.path) + '" loading="lazy" style="width:130px;height:auto;border-radius:6px;border:1px solid var(--border)">' +
+      '<figcaption class="muted" style="font-size:11px">' + (r.label || '') + '</figcaption></figure>'
+    ).join('');
+    return '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">' +
+      '<video controls autoplay loop playsinline style="width:100%;max-width:380px;border-radius:10px;background:#090a0d" src="' + videoUrl + '"></video>' +
+      (refCards ? '<div style="display:flex;flex-direction:column;gap:10px;min-width:140px"><div class="muted" style="font-size:12px">参考图（对照诊断）</div>' + refCards + '</div>' : '') +
+      '</div>' +
+      '<p class="muted" style="margin-top:10px"><a href="' + videoUrl + '" target="_blank" rel="noopener">在新标签打开成片</a>' + (extraLinksHtml ? ' · ' + extraLinksHtml : '') + '</p>';
+  }
+
+  function showResultVideo(job) {
+    jobPanel.hidden = false;
+    jobStatus.textContent = job.stage || 'Done';
+    const videoUrl = '/api/media?path=' + encodeURIComponent(job.output_path);
+    const result = job.result || {};
+    const files = [['Manifest', job.manifest_path]].filter(item => item[1]);
+    if (result.reference_masked) files.push(['人脸遮挡参考视频(确认)', result.reference_masked]);
+    const links = files.map(item => '<a href="/api/media?path=' + encodeURIComponent(item[1]) + '" target="_blank" rel="noopener">' + item[0] + '</a>').join(' · ');
+    jobResult.innerHTML = playerWithRefs(videoUrl, [], links);
+  }
+
+  const refMotionForm = document.getElementById('refMotionForm');
+  const refMotionSubmit = document.getElementById('refMotionSubmit');
+  const refMotionStatus = document.getElementById('refMotionStatus');
+  if (refMotionForm) refMotionForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const videoInput = refMotionForm.elements['video'];
+    if (!videoInput || !videoInput.files.length) { refMotionStatus.textContent = '请上传参考视频'; return; }
+    refMotionSubmit.disabled = true; refMotionStatus.textContent = '提交中…';
+    jobPanel.hidden = false; jobStatus.textContent = '参考视频驱动：分析并遮挡敏感区域…'; jobResult.innerHTML = '';
+    try {
+      const response = await fetch('/api/reference-motion', {method: 'POST', body: new FormData(refMotionForm)});
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || '提交失败');
+      poller = setInterval(async () => {
+        try {
+          await pollOnce(data.job_id, finished => { refMotionSubmit.disabled = false; refMotionStatus.textContent = '完成'; showResultVideo(finished); }, state => { jobStatus.textContent = state.stage || '生成中…'; });
+        } catch (error) { jobStatus.textContent = '失败：' + error.message; refMotionSubmit.disabled = false; }
+      }, 3000);
+    } catch (error) { jobStatus.textContent = '失败：' + error.message; refMotionSubmit.disabled = false; }
+  });
+})();
+</script>
+{% endblock %}

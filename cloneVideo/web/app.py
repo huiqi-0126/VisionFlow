@@ -28,6 +28,7 @@ from workflow.image_pipeline import ImageClonePipeline
 from workflow.replica_pipeline import ReplicaPipeline
 from workflow.outfit_switch_pipeline import OutfitSwitchPipeline
 from workflow.magic_snap_pipeline import MagicSnapPipeline
+from workflow.reference_motion_pipeline import ReferenceMotionPipeline
 from workflow.reference_video_outfit_pipeline import ReferenceVideoOutfitPipeline
 
 logger = logging.getLogger(__name__)
@@ -517,6 +518,69 @@ def _run_reference_video_outfit(job_id: str, job_dir: Path, model_image: Path | 
         logger.exception("Reference-video outfit job %s failed",job_id)
         with _jobs_lock: _jobs[job_id].update({"status":"failed","stage":"生成失败","error":str(exc)})
 
+
+def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: list[Path], prompt: str, mask_mode: str = "blur") -> None:
+    """Run the standalone reference-motion (参数视频) workflow in the background."""
+    try:
+        def report(stage: str) -> None:
+            with _jobs_lock: _jobs[job_id]["stage"] = stage
+        result = ReferenceMotionPipeline(settings).run(job_dir, ref_video, images, prompt, report, mask_mode=mask_mode)
+        with _jobs_lock:
+            _jobs[job_id].update({
+                "status": "done", "stage": "成片已生成",
+                "output_path": result["final_video"],
+                "manifest_path": str(job_dir / "manifest.json"),
+                "reference_masked_path": result["reference_masked"],
+                "result": result,
+            })
+    except Exception as exc:
+        logger.exception("Reference-motion job %s failed", job_id)
+        with _jobs_lock: _jobs[job_id].update({"status": "failed", "stage": "生成失败", "error": str(exc)})
+
+
+@app.post("/api/reference-motion")
+async def api_reference_motion(
+    prompt: str = Form(""),
+    mask_mode: str = Form("blur"),
+    video: UploadFile = File(...),
+    image1: UploadFile | None = File(None),
+    image2: UploadFile | None = File(None),
+):
+    """参考视频驱动生成：上传参考视频(必填) + 可选2张图 + 提示词 → 复用动作生成视频。"""
+    if mask_mode not in {"none", "blur", "mosaic", "fill"}:
+        mask_mode = "blur"
+    if not video or not video.filename:
+        return JSONResponse({"error": "请上传参考视频"}, status_code=400)
+    video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+    vsuffix = Path(video.filename).suffix.lower()
+    if vsuffix not in video_exts:
+        return JSONResponse({"error": "参考视频仅支持 MP4/MOV/AVI/MKV/WEBM"}, status_code=400)
+    image_exts = {".jpg", ".jpeg", ".png", ".webp"}
+
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = _PROJECT_ROOT / "output" / "reference_motions" / job_id
+    uploads_dir = job_dir / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    ref_path = uploads_dir / f"reference{vsuffix}"
+    ref_path.write_bytes(await video.read())
+
+    images: list[Path] = []
+    for idx, img in enumerate([image1, image2], 1):
+        if img and img.filename:
+            suffix = Path(img.filename).suffix.lower()
+            if suffix not in image_exts:
+                return JSONResponse({"error": "参考图仅支持 JPG、PNG、WEBP"}, status_code=400)
+            p = uploads_dir / f"image_{idx}{suffix}"
+            p.write_bytes(await img.read())
+            images.append(p)
+
+    with _jobs_lock:
+        _jobs[job_id] = {"id": job_id, "type": "reference_motion", "status": "running", "stage": "分析参考视频并遮挡敏感区域", "output_dir": str(job_dir)}
+    threading.Thread(target=_run_reference_motion, args=(job_id, job_dir, ref_path, images, prompt.strip(), mask_mode), daemon=True).start()
+    return {"job_id": job_id, "status": "started"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def page_index(request: Request):
     projects = project_mgr.list_projects()
@@ -532,6 +596,11 @@ async def page_index(request: Request):
 @app.get("/outfit-switch", response_class=HTMLResponse)
 async def page_outfit_switch(request: Request):
     return templates.TemplateResponse("outfit_switch.html", {"request": request, "defaults": _load_outfit_defaults()})
+
+
+@app.get("/reference-motion", response_class=HTMLResponse)
+async def page_reference_motion(request: Request):
+    return templates.TemplateResponse("reference_motion.html", {"request": request})
 
 
 @app.post("/api/outfit-switch/generate-defaults")

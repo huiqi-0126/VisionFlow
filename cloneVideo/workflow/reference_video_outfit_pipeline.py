@@ -113,6 +113,7 @@ class ReferenceVideoOutfitPipeline:
 
     def _transition_clip(self, job_dir: Path, number: int, a_url: str, b_url: str, ref_url: str) -> str:
         prompt = ("Use the reference video for its camera choreography, natural body motion and timing only. "
+                  "Reconstruct any blurred/masked face or body regions into a clear natural appearance — never keep blur, mosaic or masking in the result. "
                   "Create a photorealistic outdoor fashion video of the exact same beautiful woman from the two image references. "
                   "She starts in outfit A in a real scenic outdoor location, makes the same key movement as the reference video, "
                   "and at the peak motion instantly transforms into outfit B with a clean cinematic fabric-spark transition. "
@@ -154,11 +155,21 @@ class ReferenceVideoOutfitPipeline:
                 pad = int(0.15 * max(fw, fh))
                 x0, y0 = max(0, x - pad), max(0, y - pad)
                 x1, y1 = min(w, x + fw + pad), min(h, y + fh + pad)
-                cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 0, 0), -1)
+                # Heavy blur (color-preserving) instead of a black box, so the
+                # generated video doesn't inherit visible black patches.
+                roi = frame[y0:y1, x0:x1]
+                frame[y0:y1, x0:x1] = cv2.GaussianBlur(roi, (0, 0), sigmaX=18)
             writer.write(frame)
         cap.release()
         writer.release()
-        return str(output_path), any_face
+        # Re-encode mp4v → H.264; the video model rejects non-H.264 reference video.
+        h264 = output_path.with_name(output_path.stem + "_h264.mp4")
+        subprocess.run(
+            [self.ffmpeg, "-y", "-i", str(output_path), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-movflags", "+faststart", "-an", str(h264)],
+            check=True, capture_output=True, text=True,
+        )
+        return str(h264), any_face
 
     def _assemble(self, clips: list[str], output: Path) -> None:
         norm = output.parent / "normalized"
