@@ -7,6 +7,12 @@
   .field label { margin-bottom:7px; font-weight:600; }
   .field small { color:var(--muted); margin-top:6px; font-size:12px; }
   .field input, .field textarea { width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:10px; font:inherit; }
+  .preset-grid { display:flex; gap:12px; flex-wrap:wrap; }
+  .preset-card { width:150px; padding:0; overflow:hidden; background:var(--panel-2); color:var(--text); border:2px solid var(--border); text-align:left; }
+  .preset-card img { width:100%; height:180px; object-fit:cover; display:block; }
+  .preset-card .ph { height:180px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13px; }
+  .preset-card span { display:block; padding:8px; font-size:12px; }
+  .preset-card.selected { border-color:var(--accent); }
 </style>
 <section class="panel">
   <h2>参考视频驱动生成（参数视频）</h2>
@@ -67,6 +73,13 @@
   <p id="jobStatus" class="muted">准备提交任务…</p>
   <div id="jobResult"></div>
 </section>
+
+<section class="panel" id="historyPanel">
+  <h2>历史记录</h2>
+  <p class="muted" id="historyStatus">加载中…</p>
+  <div class="preset-grid" id="historyGrid"></div>
+  <div id="historyPlayer" style="margin-top:16px"></div>
+</section>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -125,6 +138,7 @@
     if (result.reference_masked) files.push(['人脸遮挡参考视频(确认)', result.reference_masked]);
     const links = files.map(item => '<a href="/api/media?path=' + encodeURIComponent(item[1]) + '" target="_blank" rel="noopener">' + item[0] + '</a>').join(' · ');
     jobResult.innerHTML = playerWithRefs(videoUrl, [], links);
+    loadHistory();
   }
 
   const refMotionForm = document.getElementById('refMotionForm');
@@ -146,6 +160,35 @@
       }, 3000);
     } catch (error) { jobStatus.textContent = '失败：' + error.message; refMotionSubmit.disabled = false; }
   });
+
+  async function loadHistory() {
+    const status = document.getElementById('historyStatus');
+    const grid = document.getElementById('historyGrid');
+    const player = document.getElementById('historyPlayer');
+    try {
+      const rows = await (await fetch('/api/reference-motion/history')).json();
+      if (!Array.isArray(rows) || !rows.length) { status.textContent = '暂无历史记录。'; return; }
+      status.textContent = '共 ' + rows.length + ' 条记录，点击卡片播放成片：';
+      grid.innerHTML = rows.map((r, idx) => {
+        const date = new Date((r.created || 0) * 1000).toLocaleString();
+        const videoUrl = '/api/media?path=' + encodeURIComponent(r.video);
+        const prompt = (r.prompt || '').replace(/^\s+|\s+$/g, '').slice(0, 30);
+        return '<button type="button" class="preset-card history-card" data-idx="' + idx + '" data-video="' + videoUrl + '">' +
+          '<div class="ph">视频成片</div>' +
+          '<span>' + date + (r.duration ? '<br>· 约 ' + r.duration + ' 秒' : '') + (prompt ? '<br>· ' + prompt : '') + '</span></button>';
+      }).join('');
+      grid.querySelectorAll('.history-card').forEach(card => card.addEventListener('click', () => {
+        const rec = rows[parseInt(card.dataset.idx, 10)] || {};
+        const url = card.dataset.video;
+        const links = [];
+        if (rec.masked_video) links.push('<a href="/api/media?path=' + encodeURIComponent(rec.masked_video) + '" target="_blank" rel="noopener">参考视频(遮挡后)</a>');
+        player.innerHTML = playerWithRefs(url, rec.refs, links.join(' · ')) +
+          (rec.mask_summary ? '<p class="muted" style="margin-top:8px">' + rec.mask_summary + '</p>' : '');
+        player.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }));
+    } catch (error) { status.textContent = '加载失败：' + error.message; }
+  }
+  loadHistory();
 })();
 </script>
 {% endblock %}

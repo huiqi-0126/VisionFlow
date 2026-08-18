@@ -650,6 +650,57 @@ async def api_reference_motion(
     return {"job_id": job_id, "status": "started"}
 
 
+@app.get("/api/reference-motion/history")
+async def api_reference_motion_history():
+    """List completed reference-motion runs (newest first), scanned from disk.
+
+    Only directories that have BOTH reference_motion.mp4 and manifest.json are
+    returned, so failed/incomplete runs are hidden. The in-memory _jobs dict is
+    not used because it is lost on restart.
+    """
+    base = _PROJECT_ROOT / "output" / "reference_motions"
+    items: list[dict[str, Any]] = []
+    if base.is_dir():
+        for directory in base.iterdir():
+            if not directory.is_dir():
+                continue
+            video_file = directory / "reference_motion.mp4"
+            manifest_file = directory / "manifest.json"
+            if not (video_file.is_file() and manifest_file.is_file()):
+                continue
+            try:
+                manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                manifest = {}
+            # Reference materials (uploaded video + images) surfaced so the
+            # viewer can compare the generated video against its inputs.
+            refs: list[dict[str, str]] = []
+            uploads = directory / "uploads"
+            if uploads.is_dir():
+                ref_video = next(uploads.glob("reference*"), None)
+                if ref_video and ref_video.is_file():
+                    refs.append({"label": "参考视频(原始)", "path": str(ref_video)})
+                for idx in (1, 2):
+                    img = next(uploads.glob(f"image_{idx}*"), None)
+                    if img and img.is_file():
+                        refs.append({"label": f"参考图 {idx}", "path": str(img)})
+            masked = manifest.get("reference_masked") or ""
+            if masked and Path(masked).is_file():
+                refs.append({"label": "参考视频(遮挡后)", "path": str(masked)})
+            items.append({
+                "id": directory.name,
+                "created": directory.stat().st_mtime,
+                "video": str(video_file),
+                "prompt": manifest.get("prompt", ""),
+                "mask_summary": manifest.get("mask_summary", ""),
+                "duration": manifest.get("duration", ""),
+                "masked_video": masked,
+                "refs": refs,
+            })
+    items.sort(key=lambda x: x.get("created", 0), reverse=True)
+    return items
+
+
 @app.get("/", response_class=HTMLResponse)
 async def page_index(request: Request):
     projects = project_mgr.list_projects()
