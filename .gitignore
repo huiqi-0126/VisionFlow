@@ -3,6 +3,8 @@ logs
 *.log
 *.jpg
 *.png
+# Large archives exceed GitHub's 100 MB limit; never commit them
+*.zip
 output/*
 **/__pycache__/
 *.pyc
