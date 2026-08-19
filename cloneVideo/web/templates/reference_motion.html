@@ -16,7 +16,7 @@
 </style>
 <section class="panel">
   <h2>参考视频驱动生成（参数视频）</h2>
-  <p class="muted">上传一段参考视频（必填）+ 可选 2 张参考图 + 提示词，系统会先遮挡视频中的人脸与赤露部位，再复用参考视频的全部动作、背景与场景生成新视频。</p>
+  <p class="muted">上传一段参考视频（必填）+ 可选替换人物图 + 提示词，系统会先遮挡视频中的人脸与赤露部位，再用图片中的人物替换视频中的人物，同时复用参考视频的全部动作、背景与场景生成新视频。</p>
   <form id="refMotionForm">
     <div class="field" style="max-width:420px;margin-bottom:14px">
       <label>视频模型</label>
@@ -49,12 +49,14 @@
         <small>会先自动遮挡人脸与赤露区域，避免被判敏感。</small>
       </div>
       <div class="field">
-        <label>参考图 1（可选）</label>
+        <label>替换人物图 1（可选，首帧主体）</label>
         <input type="file" name="image1" accept="image/png,image/jpeg,image/webp">
+        <small>图片中的人物将替换视频中的人物（五官、发型、服装以图为准）。</small>
       </div>
       <div class="field">
-        <label>参考图 2（可选）</label>
+        <label>替换人物图 2（可选，补充参考）</label>
         <input type="file" name="image2" accept="image/png,image/jpeg,image/webp">
+        <small>第二张作为额外风格参考，通常留空即可。</small>
       </div>
     </div>
     <div class="field" style="margin-top:10px">

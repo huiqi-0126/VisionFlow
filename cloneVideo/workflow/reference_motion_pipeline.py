@@ -102,21 +102,29 @@ class ReferenceMotionPipeline:
             if img and img.is_file():
                 image_urls.append(self.cos.upload_file(img))
 
-        # 3) Build the prompt: use the user's own prompt as-is — no fixed
-        # instructions and no safety suffix are injected.
-        prompt = self._clean_prompt(user_prompt)
+        # 3) Build the prompt: the user's own prompt + a fixed suffix that binds
+        # the reference image (subject) to the reference video (motion/scene), so
+        # the model actually REPLACES the person instead of ignoring the image.
+        prompt = self._build_prompt(user_prompt, has_subject_image=bool(image_urls))
         stage("2/3 视频模型：生成视频")
         ref_dur = float(self._reference_duration(ref_video))
         duration = self._pick_duration(durations, ref_dur) if durations else str(int(ref_dur))
         aspect = self._reference_aspect_ratio(ref_video)
 
         # 4) Generate.
+        # The FIRST reference image is passed as `pic` (first-frame) AND all
+        # images (including the first) are passed as `pics` (reference_image role).
+        # `pic` anchors scene 1; `pics` keeps the SAME person consistent across
+        # every scene, so a multi-scene reference video replaces the person
+        # everywhere instead of only in the first scene. The reference video goes
+        # to `video` for motion/scene reuse.
         kwargs: dict[str, Any] = dict(
             prompt=prompt,
             model=model,
             size=size,
             duration=duration,
             aspect_ratio=aspect,
+            pic=image_urls[0] if image_urls else None,
             pics=image_urls or None,
         )
         if model in REFERENCE_VIDEO_MODELS:
@@ -291,6 +299,26 @@ class ReferenceMotionPipeline:
     def _clean_prompt(user_prompt: str) -> str:
         """Return the user's prompt verbatim, with whitespace collapsed."""
         return " ".join((user_prompt or "").split())
+
+    @staticmethod
+    def _build_prompt(user_prompt: str, has_subject_image: bool) -> str:
+        """Compose the final prompt sent to the video model.
+
+        When a subject image is uploaded, append a fixed instruction that binds
+        the image (subject/character) to the reference video (motion/scene), so
+        the model REPLACES the video's person with the image's person instead of
+        merely reusing the video's motion. The user's own prompt is preserved
+        verbatim at the front.
+        """
+        prompt = " ".join((user_prompt or "").split())
+        if not has_subject_image:
+            return prompt
+        prompt += (
+            "。人物主体严格以参考图片中的人物为准，人物的五官、发型、服装与参考图片完全一致；"
+            "全片所有场景（含场景切换）中的人物始终是同一个人，外貌不随场景变化；"
+            "动作、运镜、背景与场景完全复用参考视频；去掉画面中的所有文字"
+        )
+        return prompt
 
     @staticmethod
     def _reference_duration(video_path: Path) -> str:
