@@ -34,7 +34,15 @@ class ReferenceVideoOutfitPipeline:
         self.media = MediaAPIClient(s.gkapi_key, s.gkapi_baseurl, s.poll_interval, s.max_poll_attempts)
         self.cos = COSClient(s.secret_id, s.secret_key, s.region, s.bucket, s.cos_url)
         configured = Path(s.ffmpeg_path)
-        self.ffmpeg = str(configured) if configured.is_file() else shutil.which(s.ffmpeg_path) or shutil.which("ffmpeg")
+        # Resolve ffmpeg robustly: configured file → configured dir → PATH.
+        # Never leave it None (a None entry in subprocess args would crash with a
+        # cryptic "expected str, bytes or os.PathLike object, not NoneType").
+        if configured.is_file():
+            self.ffmpeg = str(configured)
+        elif configured.is_dir():
+            self.ffmpeg = shutil.which("ffmpeg", path=str(configured)) or "ffmpeg"
+        else:
+            self.ffmpeg = shutil.which(s.ffmpeg_path) or shutil.which("ffmpeg") or "ffmpeg"
 
     def run(self, job_dir: Path, model_image: Path | None, model_prompt: str, outfits: list[str], progress: Progress | None = None) -> dict[str, Any]:
         if not 2 <= len(outfits) <= 6:
@@ -97,6 +105,21 @@ class ReferenceVideoOutfitPipeline:
         return manifest
 
     # ── steps ────────────────────────────────────────────────
+
+    def _run_ffmpeg(self, cmd: list[str]) -> None:
+        """Run an ffmpeg command; on failure surface stderr instead of a bare
+        "non-zero exit status" so the real cause (bad codec, odd dimensions,
+        corrupt input, …) is visible in the job status and server logs."""
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or "").strip() or (exc.stdout or "").strip()
+            logger.error("ffmpeg 执行失败（exit=%s）: %s", exc.returncode, detail[-2000:])
+            if len(detail) > 2000:
+                detail = detail[-2000:]
+            raise RuntimeError(
+                f"ffmpeg 执行失败（exit={exc.returncode}）: {detail or '无错误输出'}"
+            ) from exc
 
     def _look(self, d: Path, n: int, ref: str | None, person: str, outfit: str, previous: str | None) -> tuple[Path, str]:
         continuity = ("Keep the exact same woman, outdoor location, full-body camera framing, lighting and pose as the reference. " if ref else
@@ -164,10 +187,13 @@ class ReferenceVideoOutfitPipeline:
         writer.release()
         # Re-encode mp4v → H.264; the video model rejects non-H.264 reference video.
         h264 = output_path.with_name(output_path.stem + "_h264.mp4")
-        subprocess.run(
-            [self.ffmpeg, "-y", "-i", str(output_path), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        # scale …:force_divisible_by=2 — libx264 + yuv420p require even dimensions;
+        # OpenCV may have written an odd-width frame (e.g. 719×1280) unchanged.
+        self._run_ffmpeg(
+            [self.ffmpeg, "-y", "-i", str(output_path),
+             "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p",
              "-r", "30", "-t", "15", "-movflags", "+faststart", "-an", str(h264)],
-            check=True, capture_output=True, text=True,
         )
         return str(h264), any_face
 
@@ -177,21 +203,18 @@ class ReferenceVideoOutfitPipeline:
         segs: list[Path] = []
         for i, clip in enumerate(clips, 1):
             seg = norm / f"seg_{i:02d}.mp4"
-            subprocess.run(
+            self._run_ffmpeg(
                 [self.ffmpeg, "-y", "-i", clip, "-t", str(SEG_DURATION),
                  "-vf", "fps=30,scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280",
                  "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(seg)],
-                check=True, capture_output=True, text=True,
             )
             segs.append(seg)
         concat = output.parent / "concat.txt"
         concat.write_text("".join(f"file '{p.as_posix()}'\n" for p in segs), encoding="utf-8")
         video = output.parent / "loop.mp4"
-        subprocess.run(
+        self._run_ffmpeg(
             [self.ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(video)],
-            check=True, capture_output=True, text=True,
         )
-        subprocess.run(
+        self._run_ffmpeg(
             [self.ffmpeg, "-y", "-i", str(video), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output)],
-            check=True, capture_output=True, text=True,
         )

@@ -46,7 +46,8 @@ class Settings:
 
     # --- 轮询参数 ---
     poll_interval: int = 5
-    max_poll_attempts: int = 120
+    # 视频生成任务最长等待 = poll_interval × max_poll_attempts = 5s × 360 = 1800s (30 分钟)
+    max_poll_attempts: int = 360
 
     # --- 视频分析参数 ---
     keyframe_interval: int = 2            # 关键帧提取间隔（秒）

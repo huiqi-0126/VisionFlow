@@ -31,7 +31,7 @@ class MediaAPIClient:
         api_key: str,
         base_url: str,
         poll_interval: int = 5,
-        max_poll_attempts: int = 120,
+        max_poll_attempts: int = 360,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -137,6 +137,7 @@ class MediaAPIClient:
         pics: list[str] | None = None,
         video_type: str = "0",
         video: str | None = None,
+        nocos: bool = True,
     ) -> str:
         """提交视频生成任务，返回 task_id
 
@@ -144,6 +145,7 @@ class MediaAPIClient:
             pic: 首帧参考图公网 URL（本项目用生成的风格图作为单图驱动）
             duration: 默认 "4" 秒素材
             video_type: "0" = 非固定时长模式（用于 4s）
+            nocos: 是否关闭内容审查（默认 True，跳过安全过滤直接出片）
         """
         url = f"{self.base_url}/v1/videos/generations"
         body: dict[str, Any] = {
@@ -151,6 +153,7 @@ class MediaAPIClient:
             "model": model,
             "size": size,
             "duration": duration,
+            "nocos": nocos,
         }
         if aspect_ratio:
             body["aspectRatio"] = aspect_ratio
@@ -167,8 +170,8 @@ class MediaAPIClient:
             body["video"] = video
 
         logger.info(
-            "VIDEO GEN request | model=%s | size=%s | duration=%s | aspect=%s | pic=%s | end_pic=%s | pics=%s | prompt=%s",
-            model, size, duration, aspect_ratio, pic, end_pic, pics, prompt,
+            "VIDEO GEN request | model=%s | size=%s | duration=%s | aspect=%s | pic=%s | end_pic=%s | pics=%s | nocos=%s | prompt=%s",
+            model, size, duration, aspect_ratio, pic, end_pic, pics, nocos, prompt,
         )
         resp = self._post_json_with_retry(url, body)
         if not resp.ok:

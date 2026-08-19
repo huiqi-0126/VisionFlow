@@ -6,8 +6,8 @@ video's full motion / action / background / scene.
 
 Before the reference video is sent to the video model it is analyzed and any
 sensitive regions are masked (faces blacked out; exposed-skin regions masked by
-contour) so the model does not treat the reference as sensitive content. The
-built prompt is kept clean of sensitive terms.
+contour). The text prompt sent to the video model is the user's own prompt,
+used as-is (no fixed instructions or safety suffix are injected).
 """
 from __future__ import annotations
 
@@ -29,12 +29,6 @@ from core.media_api import MediaAPIClient
 logger = logging.getLogger(__name__)
 Progress = Callable[[str], None]
 
-# Fixed, safe main instruction + a safety suffix appended to every request.
-MAIN_PROMPT_RECONSTRUCT = ("请将参考视频中被模糊遮挡的面部与人体部位合理补全，生成清晰自然的画面"
-                           "（清晰自然的面部、正常的皮肤与着装），绝不能出现模糊、马赛克或遮挡痕迹。")
-MAIN_PROMPT_MOTION = "复用参考视频的全部动作与运动流程，动作、背景、场景保持一致。"
-SAFETY_SUFFIX = "画面内容健康向上，人物着装得体，无裸露、无暴力、无敏感内容。"
-
 # Video API supported aspect ratios → numeric value (used to keep the output
 # aspect ratio consistent with the uploaded reference video).
 SUPPORTED_ASPECT_RATIOS = {
@@ -46,10 +40,6 @@ SUPPORTED_ASPECT_RATIOS = {
 # DOES support uploading a reference video.
 REFERENCE_VIDEO_MODELS = {"seedance-2.0-fast", "seedance-2.0-standard", "minimax-h3"}
 
-# Coarse sensitive-term blacklist (removed from the user's prompt).
-SENSITIVE_TERMS = ["裸体", "裸露", "全裸", "色情", "情色", "性感", "内衣", "内裤", "性爱", "性交",
-                   "nude", "naked", "nudity", "sex", "porn", "explicit", "erotic"]
-
 
 class ReferenceMotionPipeline:
     """Reuse a reference video's motion to generate a new video."""
@@ -59,8 +49,16 @@ class ReferenceMotionPipeline:
         s = self.settings
         self.media = MediaAPIClient(s.gkapi_key, s.gkapi_baseurl, s.poll_interval, s.max_poll_attempts)
         self.cos = COSClient(s.secret_id, s.secret_key, s.region, s.bucket, s.cos_url)
+        # Resolve ffmpeg robustly: configured file → configured dir → PATH.
+        # Never leave it None (a None entry in subprocess args would crash with a
+        # cryptic "expected str, bytes or os.PathLike object, not NoneType").
         configured = Path(s.ffmpeg_path)
-        self.ffmpeg = str(configured) if configured.is_file() else shutil.which(s.ffmpeg_path) or shutil.which("ffmpeg")
+        if configured.is_file():
+            self.ffmpeg = str(configured)
+        elif configured.is_dir():
+            self.ffmpeg = shutil.which("ffmpeg", path=str(configured)) or "ffmpeg"
+        else:
+            self.ffmpeg = shutil.which(s.ffmpeg_path) or shutil.which("ffmpeg") or "ffmpeg"
 
     def run(
         self,
@@ -84,6 +82,14 @@ class ReferenceMotionPipeline:
             if progress:
                 progress(msg)
 
+        # ffmpeg is required to mask / re-encode the reference video. Fail with
+        # an actionable message instead of a cryptic NoneType crash.
+        if not (Path(self.ffmpeg).is_file() or shutil.which(self.ffmpeg)):
+            raise RuntimeError(
+                "未找到 ffmpeg，无法处理参考视频。请安装 ffmpeg 并加入 PATH，"
+                f"或修正 .env 中的 FFMPEG_PATH（当前值: {self.settings.ffmpeg_path!r}）"
+            )
+
         # 1) Analyze + mask sensitive regions in the reference video.
         stage(f"1/3 处理参考视频（遮挡方式: {mask_mode}）")
         masked_path, summary = self._mask_sensitive(ref_video, job_dir / "reference_masked.mp4", mode=mask_mode, mask_skin=mask_skin)
@@ -96,17 +102,9 @@ class ReferenceMotionPipeline:
             if img and img.is_file():
                 image_urls.append(self.cos.upload_file(img))
 
-        # 3) Build a clean prompt.
-        if model in REFERENCE_VIDEO_MODELS:
-            # reference-video mode: reuse motion; add "reconstruct masked regions"
-            # ONLY when masking is actually applied (not for "none").
-            prompt = MAIN_PROMPT_MOTION
-            if mask_mode != "none":
-                prompt = MAIN_PROMPT_RECONSTRUCT + " " + prompt
-            prompt += " " + self._sanitize(user_prompt)
-        else:
-            # no reference-video input → plain text-to-video prompt
-            prompt = self._sanitize(user_prompt)
+        # 3) Build the prompt: use the user's own prompt as-is — no fixed
+        # instructions and no safety suffix are injected.
+        prompt = self._clean_prompt(user_prompt)
         stage("2/3 视频模型：生成视频")
         ref_dur = float(self._reference_duration(ref_video))
         duration = self._pick_duration(durations, ref_dur) if durations else str(int(ref_dur))
@@ -147,6 +145,20 @@ class ReferenceMotionPipeline:
 
     # ── masking ──────────────────────────────────────────────
 
+    def _run_ffmpeg(self, cmd: list[str]) -> None:
+        """Run an ffmpeg command; on failure surface stderr instead of a bare
+        "non-zero exit status" so the real cause (missing DLLs, bad codec,
+        corrupt input, …) is visible in the error message."""
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or "").strip() or (exc.stdout or "").strip()
+            if len(detail) > 1200:
+                detail = detail[-1200:]
+            raise RuntimeError(
+                f"ffmpeg 执行失败（exit={exc.returncode}）: {detail or '无错误输出'}"
+            ) from exc
+
     @staticmethod
     def _skin_mask(frame) -> "np.ndarray":
         """Precise skin mask: YCrCb skin range AND a saturation gate.
@@ -178,11 +190,10 @@ class ReferenceMotionPipeline:
         probe.release()
         if sw and sh and (sw > 1280 or sh > 1280):
             tmp = video_path.with_name(video_path.stem + "_small.mp4")
-            subprocess.run(
+            self._run_ffmpeg(
                 [self.ffmpeg, "-y", "-i", str(video_path),
-                 "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease",
+                 "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease:force_divisible_by=2",
                  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "-an", str(tmp)],
-                check=True, capture_output=True, text=True,
             )
             src = tmp
 
@@ -267,23 +278,19 @@ class ReferenceMotionPipeline:
     def _reencode_h264(self, src: Path, dst: Path) -> None:
         # Downscale to ≤720p (long side 1280) — seedance rejects 4K reference video;
         # -r 30 normalizes fps (24-60 required, VFR drifts); -t 15 caps duration.
-        subprocess.run(
+        self._run_ffmpeg(
             [self.ffmpeg, "-y", "-i", str(src),
-             "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease",
+             "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease:force_divisible_by=2",
              "-c:v", "libx264", "-pix_fmt", "yuv420p",
              "-r", "30", "-t", "15", "-movflags", "+faststart", "-an", str(dst)],
-            check=True, capture_output=True, text=True,
         )
 
     # ── prompt / duration ────────────────────────────────────
 
     @staticmethod
-    def _sanitize(user_prompt: str) -> str:
-        text = user_prompt or ""
-        for term in SENSITIVE_TERMS:
-            text = text.replace(term, "")
-        text = " ".join(text.split())
-        return (text + " " if text else "") + SAFETY_SUFFIX
+    def _clean_prompt(user_prompt: str) -> str:
+        """Return the user's prompt verbatim, with whitespace collapsed."""
+        return " ".join((user_prompt or "").split())
 
     @staticmethod
     def _reference_duration(video_path: Path) -> str:
