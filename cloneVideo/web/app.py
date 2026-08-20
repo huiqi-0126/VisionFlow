@@ -580,12 +580,12 @@ async def api_video_models():
     return _get_video_models()
 
 
-def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: list[Path], prompt: str, mask_mode: str = "light", mask_skin: bool = False, model: str = "minimax-h3", size: str = "768p", durations: list[int] | None = None) -> None:
+def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: list[Path], prompt: str, mask_mode: str = "none", mask_skin: bool = False, model: str = "minimax-h3", size: str = "768p", durations: list[int] | None = None, keep_audio: bool = False) -> None:
     """Run the standalone reference-motion (参数视频) workflow in the background."""
     try:
         def report(stage: str) -> None:
             with _jobs_lock: _jobs[job_id]["stage"] = stage
-        result = ReferenceMotionPipeline(settings).run(job_dir, ref_video, images, prompt, report, mask_mode=mask_mode, mask_skin=mask_skin, model=model, size=size, durations=durations)
+        result = ReferenceMotionPipeline(settings).run(job_dir, ref_video, images, prompt, report, mask_mode=mask_mode, mask_skin=mask_skin, model=model, size=size, durations=durations, keep_audio=keep_audio)
         with _jobs_lock:
             _jobs[job_id].update({
                 "status": "done", "stage": "成片已生成",
@@ -602,8 +602,9 @@ def _run_reference_motion(job_id: str, job_dir: Path, ref_video: Path, images: l
 @app.post("/api/reference-motion")
 async def api_reference_motion(
     prompt: str = Form(""),
-    mask_mode: str = Form("light"),
+    mask_mode: str = Form("none"),
     mask_skin: bool = Form(False),
+    keep_audio: bool = Form(False),
     model: str = Form("minimax-h3"),
     video: UploadFile = File(...),
     image1: UploadFile | None = File(None),
@@ -611,7 +612,7 @@ async def api_reference_motion(
 ):
     """参考视频驱动生成：上传参考视频(必填) + 可选2张图 + 提示词 → 复用动作生成视频。"""
     if mask_mode not in {"none", "light", "medium", "heavy"}:
-        mask_mode = "light"
+        mask_mode = "none"
     if not video or not video.filename:
         return JSONResponse({"error": "请上传参考视频"}, status_code=400)
     video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
@@ -619,6 +620,13 @@ async def api_reference_motion(
     if vsuffix not in video_exts:
         return JSONResponse({"error": "参考视频仅支持 MP4/MOV/AVI/MKV/WEBM"}, status_code=400)
     image_exts = {".jpg", ".jpeg", ".png", ".webp"}
+
+    # 10MB hard limit: larger uploads are rejected up-front (masking/re-encoding
+    # huge files is slow and the video model caps input anyway).
+    MAX_REF_VIDEO_BYTES = 10 * 1024 * 1024
+    video_bytes = await video.read()
+    if len(video_bytes) > MAX_REF_VIDEO_BYTES:
+        return JSONResponse({"error": f"参考视频过大（{len(video_bytes) / 1024 / 1024:.1f}MB > 10MB），请压缩或裁剪后再上传"}, status_code=400)
 
     # Resolve size + duration window for the selected video model.
     models = _get_video_models()
@@ -632,7 +640,7 @@ async def api_reference_motion(
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     ref_path = uploads_dir / f"reference{vsuffix}"
-    ref_path.write_bytes(await video.read())
+    ref_path.write_bytes(video_bytes)
 
     images: list[Path] = []
     for idx, img in enumerate([image1, image2], 1):
@@ -646,7 +654,7 @@ async def api_reference_motion(
 
     with _jobs_lock:
         _jobs[job_id] = {"id": job_id, "type": "reference_motion", "status": "running", "stage": "分析参考视频并遮挡敏感区域", "output_dir": str(job_dir)}
-    threading.Thread(target=_run_reference_motion, args=(job_id, job_dir, ref_path, images, prompt.strip(), mask_mode, mask_skin, model, size, durations), daemon=True).start()
+    threading.Thread(target=_run_reference_motion, args=(job_id, job_dir, ref_path, images, prompt.strip(), mask_mode, mask_skin, model, size, durations, keep_audio), daemon=True).start()
     return {"job_id": job_id, "status": "started"}
 
 
@@ -664,9 +672,14 @@ async def api_reference_motion_history():
         for directory in base.iterdir():
             if not directory.is_dir():
                 continue
-            video_file = directory / "reference_motion.mp4"
+            # Prefer the audio-merged cut (keep_audio) over the silent one.
+            video_file = next(
+                (directory / name for name in ("reference_motion_audio.mp4", "reference_motion.mp4")
+                 if (directory / name).is_file()),
+                None,
+            )
             manifest_file = directory / "manifest.json"
-            if not (video_file.is_file() and manifest_file.is_file()):
+            if video_file is None or not manifest_file.is_file():
                 continue
             try:
                 manifest = json.loads(manifest_file.read_text(encoding="utf-8"))

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>双手机同步字幕 · 测试台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">LOCAL RENDER CONSOLE</p>
+          <h1>双手机同步字幕</h1>
+          <p class="lede">上传一段带声音的视频。原技能会把视频放进下方手机，并在上方红色屏幕生成同步动态字幕。</p>
+        </div>
+        <div class="format-card" aria-label="固定输出规格">
+          <span>固定输出</span>
+          <strong>1080 × 1920</strong>
+          <small>24 FPS · H.264 / AAC</small>
+        </div>
+      </header>
+
+      <section id="runtimeCard" class="runtime-card checking" aria-live="polite">
+        <span class="runtime-dot"></span>
+        <div>
+          <strong id="runtimeTitle">正在检查本地能力…</strong>
+          <p id="runtimeMessage">请稍候</p>
+        </div>
+        <code id="runtimeLabel">—</code>
+      </section>
+
+      <div class="workspace">
+        <form id="renderForm" class="panel form-panel">
+          <div class="panel-heading">
+            <span class="step">01</span>
+            <div>
+              <h2>选择下方手机视频</h2>
+              <p>视频必须包含音轨，且不超过 45 秒。</p>
+            </div>
+          </div>
+
+          <label id="dropZone" class="drop-zone" for="videoFile">
+            <input id="videoFile" name="video" type="file" accept="video/*" required>
+            <span class="upload-icon" aria-hidden="true">↗</span>
+            <strong id="fileTitle">点击选择，或拖入视频</strong>
+            <small id="fileMeta">MP4、MOV 等可被 FFmpeg 读取的格式</small>
+          </label>
+
+          <div class="panel-heading subtitle-heading">
+            <span class="step">02</span>
+            <div>
+              <h2>设置字幕内容</h2>
+              <p>字幕时间始终由视频语音自动对齐。</p>
+            </div>
+          </div>
+
+          <fieldset class="mode-picker">
+            <label>
+              <input type="radio" name="mode" value="auto" checked>
+              <span><strong>自动字幕</strong><small>本地识别视频中的语音</small></span>
+            </label>
+            <label>
+              <input type="radio" name="mode" value="text">
+              <span><strong>精确文本</strong><small>使用你提供的文字，自动匹配时间</small></span>
+            </label>
+          </fieldset>
+
+          <label id="textField" class="text-field hidden">
+            <span>精确字幕文本</span>
+            <textarea id="subtitleText" rows="5" maxlength="8000" placeholder="在这里粘贴需要逐字显示的字幕…"></textarea>
+            <small><span id="textCount">0</span> / 8000</small>
+          </label>
+
+          <button id="submitButton" class="primary-button" type="submit" disabled>
+            <span>生成视频</span>
+            <small>只运行一次原技能流水线</small>
+          </button>
+          <p id="formError" class="form-error" role="alert"></p>
+        </form>
+
+        <section class="panel output-panel">
+          <div class="panel-heading">
+            <span class="step">03</span>
+            <div>
+              <h2>生成结果</h2>
+              <p id="resultSubtitle">等待提交参数</p>
+            </div>
+          </div>
+
+          <div id="emptyState" class="empty-state">
+            <div class="phone-stack" aria-hidden="true">
+              <span class="phone phone-top">WORDS</span>
+              <span class="phone phone-bottom">VIDEO</span>
+            </div>
+            <p>完成后可在这里预览和下载 MP4</p>
+          </div>
+
+          <div id="progressState" class="progress-state hidden" aria-live="polite">
+            <div class="spinner"></div>
+            <strong id="progressTitle">准备生成</strong>
+            <p id="progressMessage">正在上传视频…</p>
+            <div class="progress-track"><span></span></div>
+          </div>
+
+          <div id="videoState" class="video-state hidden">
+            <video id="resultVideo" controls playsinline></video>
+            <a id="downloadLink" class="download-button" download="two-phone-synced-subtitles.mp4">下载 MP4</a>
+          </div>
+
+          <details id="logPanel" class="log-panel hidden">
+            <summary>运行日志</summary>
+            <pre id="logOutput"></pre>
+          </details>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

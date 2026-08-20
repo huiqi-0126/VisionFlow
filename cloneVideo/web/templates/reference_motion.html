@@ -28,10 +28,10 @@
     <div class="field" style="max-width:420px;margin-bottom:14px">
       <label>遮挡方式（打码力度）</label>
       <select name="mask_mode" id="maskMode" style="width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit">
-        <option value="light" selected>轻度模糊（推荐，最易被补全还原）</option>
+        <option value="none" selected>不遮挡</option>
+        <option value="light">轻度模糊（最易被补全还原）</option>
         <option value="medium">中度模糊</option>
         <option value="heavy">重度模糊</option>
-        <option value="none">不遮挡</option>
       </select>
       <small>力度越小，模型越容易把遮挡处补全成清晰人脸；力度越大遮挡越彻底但成片越可能残留模糊。</small>
     </div>
@@ -41,6 +41,13 @@
         同时遮挡肤色部位（赤露身体）
       </label>
       <small>默认关闭：肤色检测可能误伤米白墙、木色沙发、食物等暖色物体。仅当视频确有赤露身体时才勾选。</small>
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+        <input type="checkbox" name="keep_audio" value="true" style="width:auto">
+        保留原视频音频
+      </label>
+      <small>勾选后，成片音轨与参考视频保持一致（自动从原视频提取合并）；原视频无音轨时成片保持无声。</small>
     </div>
     <div class="row">
       <div class="field">
@@ -146,10 +153,29 @@
   const refMotionForm = document.getElementById('refMotionForm');
   const refMotionSubmit = document.getElementById('refMotionSubmit');
   const refMotionStatus = document.getElementById('refMotionStatus');
+  const MAX_VIDEO_MB = 10;
+  const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
+  // Instant size check right after the file is picked, so the user knows
+  // immediately instead of after submit/upload.
+  const videoPicker = refMotionForm ? refMotionForm.elements['video'] : null;
+  if (videoPicker) videoPicker.addEventListener('change', () => {
+    const f = videoPicker.files && videoPicker.files[0];
+    if (!f) return;
+    if (f.size > MAX_VIDEO_BYTES) {
+      refMotionStatus.textContent = '参考视频过大（' + (f.size / 1024 / 1024).toFixed(1) + 'MB > ' + MAX_VIDEO_MB + 'MB），请压缩或裁剪后再上传';
+      videoPicker.value = '';
+    } else {
+      refMotionStatus.textContent = '';
+    }
+  });
   if (refMotionForm) refMotionForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const videoInput = refMotionForm.elements['video'];
     if (!videoInput || !videoInput.files.length) { refMotionStatus.textContent = '请上传参考视频'; return; }
+    if (videoInput.files[0].size > MAX_VIDEO_BYTES) {
+      refMotionStatus.textContent = '参考视频过大（' + (videoInput.files[0].size / 1024 / 1024).toFixed(1) + 'MB > ' + MAX_VIDEO_MB + 'MB），请压缩或裁剪后再上传';
+      return;
+    }
     refMotionSubmit.disabled = true; refMotionStatus.textContent = '提交中…';
     jobPanel.hidden = false; jobStatus.textContent = '参考视频驱动：分析并遮挡敏感区域…'; jobResult.innerHTML = '';
     try {

@@ -67,11 +67,12 @@ class ReferenceMotionPipeline:
         images: list[Path],
         user_prompt: str,
         progress: Progress | None = None,
-        mask_mode: str = "light",
+        mask_mode: str = "none",
         mask_skin: bool = False,
         model: str = "minimax-h3",
         size: str = "768p",
         durations: list[int] | None = None,
+        keep_audio: bool = False,
     ) -> dict[str, Any]:
         if not ref_video.is_file():
             raise RuntimeError("参考视频不存在")
@@ -135,6 +136,16 @@ class ReferenceMotionPipeline:
             raise RuntimeError(f"参考视频生成失败: {result}")
         output = job_dir / "reference_motion.mp4"
         self.media.download_media(result["url"], output)
+        # Optional: carry the ORIGINAL reference video's audio track over to the
+        # generated video (the model outputs a silent clip). Audio is taken from
+        # the untouched upload, not the masked intermediate.
+        if keep_audio:
+            merged = job_dir / "reference_motion_audio.mp4"
+            if self._merge_audio(output, ref_video, merged):
+                output = merged
+                stage("已合并原视频音频")
+            else:
+                stage("原视频无音轨，成片保持无声")
         stage("3/3 完成")
 
         manifest = {
@@ -292,6 +303,43 @@ class ReferenceMotionPipeline:
              "-c:v", "libx264", "-pix_fmt", "yuv420p",
              "-r", "30", "-t", "15", "-movflags", "+faststart", "-an", str(dst)],
         )
+
+    def _ffprobe(self) -> str:
+        """Locate ffprobe next to the configured ffmpeg (same build dir), else PATH."""
+        sibling = Path(self.ffmpeg).with_name("ffprobe.exe" if os.name == "nt" else "ffprobe")
+        if sibling.is_file():
+            return str(sibling)
+        return shutil.which("ffprobe") or ""
+
+    def _merge_audio(self, generated: Path, source: Path, output: Path) -> bool:
+        """Copy the source video's audio track onto the generated (silent) video.
+
+        Returns True when the merged file was written; False when the source has
+        no audio track (or ffprobe is unavailable) — the caller keeps the silent
+        original in that case.
+        """
+        ffprobe = self._ffprobe()
+        if not ffprobe:
+            logger.warning("merge_audio: ffprobe 不可用，跳过音频合并")
+            return False
+        probe = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(source)],
+            capture_output=True, text=True,
+        )
+        if "audio" not in (probe.stdout or ""):
+            logger.info("merge_audio: %s 无音轨，跳过", source)
+            return False
+        # -shortest: audio stops with the (usually shorter) generated video; the
+        # motion copy starts from the beginning, so audio aligns from 0s.
+        self._run_ffmpeg(
+            [self.ffmpeg, "-y",
+             "-i", str(generated), "-i", str(source),
+             "-map", "0:v:0", "-map", "1:a:0?",
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+             "-shortest", "-movflags", "+faststart", str(output)],
+        )
+        return True
 
     # ── prompt / duration ────────────────────────────────────
 
